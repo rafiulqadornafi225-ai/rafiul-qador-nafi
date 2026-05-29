@@ -17,21 +17,42 @@ import Header from './components/Header';
 import JerseyCard from './components/JerseyCard';
 import RulesCard from './components/RulesCard';
 import OrderForm from './components/OrderForm';
-import OrdersList from './components/OrdersList';
+import SecureOrdersPanel from './components/SecureOrdersPanel';
 import { JERSEYS } from './data';
 import { Jersey, Order, VisitorLog } from './types';
 import VisitorTracker from './components/VisitorTracker';
+import AutomationHub from './components/AutomationHub';
 
 export default function App() {
   const [bKashNumber, setBKashNumber] = useState('01402580064');
   const [nagadNumber, setNagadNumber] = useState('01402580064');
+  const [whatsappNumber, setWhatsappNumber] = useState('01402580064');
+  const [bKashQR, setBKashQR] = useState<string | null>(null);
+  const [nagadQR, setNagadQR] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [personalOrders, setPersonalOrders] = useState<Order[]>([]);
   const [jerseysList, setJerseysList] = useState<Jersey[]>(JERSEYS);
   const [isAdmin, setIsAdmin] = useState(false);
+
+  // Load personal order history from localStorage on mounting
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('my_orders_history');
+        if (stored) {
+          setPersonalOrders(JSON.parse(stored));
+        }
+      } catch (err) {
+        console.error("Error reading personal order history from storage", err);
+      }
+    }
+  }, []);
 
   // Views tracker & logs state
   const [viewsCount, setViewsCount] = useState<number>(147);
   const [visitorLogs, setVisitorLogs] = useState<VisitorLog[]>([]);
+  const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
+  const [webhookLogs, setWebhookLogs] = useState<any[]>([]);
 
 
   // Search & Filters state
@@ -78,77 +99,87 @@ export default function App() {
   });
 
   // Seed / Sync of initial statistics & settings with the persistent Cloud backend server
-  useEffect(() => {
-    const fetchGlobalState = async () => {
-      try {
-        const response = await fetch('/api/config');
-        if (response.ok) {
-          const data = await response.json();
-          setBKashNumber(data.bKashNumber);
-          setNagadNumber(data.nagadNumber);
-          setJerseysList(data.jerseys);
-          setOrders(data.orders);
-          setViewsCount(data.viewsCount);
+  const fetchGlobalState = async () => {
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (isAdmin) {
+        headers['x-admin-passcode'] = 'admin2026';
+      }
+      const response = await fetch('/api/config', {
+        headers
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setBKashNumber(data.bKashNumber);
+        setNagadNumber(data.nagadNumber);
+        if (data.whatsappNumber !== undefined) setWhatsappNumber(data.whatsappNumber || '01402580064');
+        if (data.bKashQR !== undefined) setBKashQR(data.bKashQR);
+        if (data.nagadQR !== undefined) setNagadQR(data.nagadQR);
+        if (data.webhookUrl !== undefined) setWebhookUrl(data.webhookUrl);
+        setJerseysList(data.jerseys || []);
+        setOrders(data.orders || []);
+        setViewsCount(data.viewsCount || 0);
+        
+        let realSessionId = sessionStorage.getItem('current_log_id');
+        if (!realSessionId) {
+          realSessionId = 'v-real-' + Math.floor(Math.random() * 100000);
+          sessionStorage.setItem('current_log_id', realSessionId);
           
-          let realSessionId = sessionStorage.getItem('current_log_id');
-          if (!realSessionId) {
-            realSessionId = 'v-real-' + Math.floor(Math.random() * 100000);
-            sessionStorage.setItem('current_log_id', realSessionId);
-            
-            const userAgent = navigator.userAgent;
-            let detectedDevice = 'PC Device';
-            if (/android/i.test(userAgent)) detectedDevice = 'Android Mobile';
-            else if (/iphone|ipad/i.test(userAgent)) detectedDevice = 'iPhone Mobile';
-            else if (/macintosh/i.test(userAgent)) detectedDevice = 'Mac PC';
-            else if (/windows/i.test(userAgent)) detectedDevice = 'Windows PC';
+          const userAgent = navigator.userAgent;
+          let detectedDevice = 'PC Device';
+          if (/android/i.test(userAgent)) detectedDevice = 'Android Mobile';
+          else if (/iphone|ipad/i.test(userAgent)) detectedDevice = 'iPhone Mobile';
+          else if (/macintosh/i.test(userAgent)) detectedDevice = 'Mac PC';
+          else if (/windows/i.test(userAgent)) detectedDevice = 'Windows PC';
 
-            const userIp = '103.84.' + Math.floor(Math.random() * 255) + '.' + Math.floor(Math.random() * 255);
-            const userLocation = 'Mirpur, Dhaka'; 
-            const now = new Date();
-            const formatTime = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-            const formatMonth = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-            const formattedTimestamp = `${formatMonth}, ${formatTime}`;
+          const userIp = '103.84.' + Math.floor(Math.random() * 255) + '.' + Math.floor(Math.random() * 255);
+          const userLocation = 'Mirpur, Dhaka'; 
+          const now = new Date();
+          const formatTime = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+          const formatMonth = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const formattedTimestamp = `${formatMonth}, ${formatTime}`;
 
-            const realUserLog: VisitorLog = {
-              id: realSessionId,
-              name: 'You (Active Visitor)',
-              location: userLocation,
-              device: detectedDevice,
-              action: 'Entered NAFI Jersey House Webpage',
-              timestamp: formattedTimestamp,
-              ip: userIp,
-              isReal: true
-            };
+          const realUserLog: VisitorLog = {
+            id: realSessionId,
+            name: 'You (Active Visitor)',
+            location: userLocation,
+            device: detectedDevice,
+            action: 'Entered NAFI Jersey House Webpage',
+            timestamp: formattedTimestamp,
+            ip: userIp,
+            isReal: true
+          };
 
-            // Register subscriber session on our API database server
-            await fetch('/api/visitor-logs', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ singleLog: realUserLog })
-            });
+          // Register subscriber session on our API database server
+          await fetch('/api/visitor-logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ singleLog: realUserLog })
+          });
 
-            // Increment page hits views metrics
-            const viewRes = await fetch('/api/views/increment', { method: 'POST' });
-            if (viewRes.ok) {
-              const viewData = await viewRes.json();
-              setViewsCount(viewData.viewsCount);
-            }
-          }
-          
-          // Re-load to fetch all active visitor logs correctly
-          const finalRes = await fetch('/api/config');
-          if (finalRes.ok) {
-            const finalData = await finalRes.json();
-            setVisitorLogs(finalData.visitorLogs);
+          // Increment page hits views metrics
+          const viewRes = await fetch('/api/views/increment', { method: 'POST' });
+          if (viewRes.ok) {
+            const viewData = await viewRes.json();
+            setViewsCount(viewData.viewsCount);
           }
         }
-      } catch (err) {
-        console.error("Cloud Run connection fallback. Keeping default in-memory list active.", err);
+        
+        // Re-load to fetch all active visitor logs correctly
+        const finalRes = await fetch('/api/config', { headers });
+        if (finalRes.ok) {
+          const finalData = await finalRes.json();
+          setVisitorLogs(finalData.visitorLogs || []);
+        }
       }
-    };
+    } catch (err) {
+      console.error("Cloud Run connection fallback. Keeping default in-memory list active.", err);
+    }
+  };
 
+  useEffect(() => {
     fetchGlobalState();
-  }, []);
+  }, [isAdmin]);
 
   // Update active session action helper
   const updateActiveSessionAction = (actionDetails: string, customName?: string) => {
@@ -201,7 +232,10 @@ export default function App() {
     setBKashNumber(newNum);
     fetch('/api/config/payment', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-admin-passcode': 'admin2026'
+      },
       body: JSON.stringify({ bKashNumber: newNum })
     }).catch(err => console.error(err));
   };
@@ -210,20 +244,146 @@ export default function App() {
     setNagadNumber(newNum);
     fetch('/api/config/payment', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-admin-passcode': 'admin2026'
+      },
       body: JSON.stringify({ nagadNumber: newNum })
     }).catch(err => console.error(err));
   };
 
+  const handleUpdateWhatsappNumber = (newNum: string) => {
+    setWhatsappNumber(newNum);
+    fetch('/api/config/payment', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-admin-passcode': 'admin2026'
+      },
+      body: JSON.stringify({ whatsappNumber: newNum })
+    }).catch(err => console.error(err));
+  };
+
+  const handleUpdateQR = (type: 'bKash' | 'Nagad', data: string | null) => {
+    if (type === 'bKash') {
+      setBKashQR(data);
+      fetch('/api/config/payment', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-passcode': 'admin2026'
+        },
+        body: JSON.stringify({ bKashQR: data })
+      }).catch(err => console.error("Error updating bKash QR on backend", err));
+    } else {
+      setNagadQR(data);
+      fetch('/api/config/payment', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-passcode': 'admin2026'
+        },
+        body: JSON.stringify({ nagadQR: data })
+      }).catch(err => console.error("Error updating Nagad QR on backend", err));
+    }
+  };
+
+  const fetchWebhookLogs = async () => {
+    try {
+      const response = await fetch('/api/integration/logs', {
+        headers: {
+          'x-admin-passcode': 'admin2026'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setWebhookLogs(data.logs || []);
+      }
+    } catch (err) {
+      console.error("Error fetching integration logs", err);
+    }
+  };
+
+  const handleUpdateWebhookUrl = async (url: string | null) => {
+    setWebhookUrl(url);
+    try {
+      await fetch('/api/config/webhook', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'x-admin-passcode': 'admin2026'
+        },
+        body: JSON.stringify({ webhookUrl: url })
+      });
+      fetchWebhookLogs();
+    } catch (err) {
+      console.error("Error setting webhook configuration on server", err);
+    }
+  };
+
+  const handleClearWebhookLogs = async () => {
+    try {
+      const response = await fetch('/api/integration/logs/clear', { 
+        method: 'POST',
+        headers: {
+          'x-admin-passcode': 'admin2026'
+        }
+      });
+      if (response.ok) {
+        setWebhookLogs([]);
+      }
+    } catch (err) {
+      console.error("Error clearing integration logs", err);
+    }
+  };
+
+  const handleTestDispatch = async () => {
+    try {
+      const response = await fetch('/api/integration/test', { 
+        method: 'POST',
+        headers: {
+          'x-admin-passcode': 'admin2026'
+        }
+      });
+      const data = await response.json();
+      fetchWebhookLogs();
+      return data;
+    } catch (err) {
+      console.error("Error running webhook test dispatch", err);
+      return { success: false, statusText: "Network communication failure" };
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchWebhookLogs();
+      const interval = setInterval(fetchWebhookLogs, 15000); // refresh logs every 15 seconds in admin mode
+      return () => clearInterval(interval);
+    }
+  }, [isAdmin]);
+
   const handleCreateOrder = (newOrder: Order) => {
-    const updated = [newOrder, ...orders];
-    setOrders(updated);
-    
     fetch('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newOrder)
     }).catch(err => console.error(err));
+
+    // Keep an isolated, private history of placed orders on this CUSTOMER's local device
+    const updatedPersonal = [newOrder, ...personalOrders];
+    setPersonalOrders(updatedPersonal);
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('my_orders_history', JSON.stringify(updatedPersonal));
+      } catch (err) {
+        console.error("Failed to write to local storage history:", err);
+      }
+    }
+
+    // Only update admin panel orders list if logged in as admin
+    if (isAdmin) {
+      setOrders([newOrder, ...orders]);
+    }
 
     updateActiveSessionAction(`Submitted transaction ID ${newOrder.transactionId} for ${newOrder.jerseyName}`, `Customer: ${newOrder.customerName}`);
   };
@@ -232,7 +392,10 @@ export default function App() {
     setOrders(updatedOrders);
     fetch('/api/orders/update-list', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-admin-passcode': 'admin2026'
+      },
       body: JSON.stringify({ orders: updatedOrders })
     }).catch(err => console.error(err));
   };
@@ -255,7 +418,10 @@ export default function App() {
 
         fetch('/api/visitor-logs/clear', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'x-admin-passcode': 'admin2026'
+          },
           body: JSON.stringify({ activeLogId: activeId })
         }).catch(err => console.error(err));
       }
@@ -315,7 +481,12 @@ export default function App() {
   const handleResetViewsCount = () => {
     if (confirm('Are you authorized to reset cumulative website views counter?')) {
       setViewsCount(1);
-      fetch('/api/views/reset', { method: 'POST' }).catch(err => console.error(err));
+      fetch('/api/views/reset', { 
+        method: 'POST',
+        headers: {
+          'x-admin-passcode': 'admin2026'
+        }
+      }).catch(err => console.error(err));
     }
   };
 
@@ -400,7 +571,10 @@ export default function App() {
 
     fetch('/api/jerseys', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-admin-passcode': 'admin2026'
+      },
       body: JSON.stringify(newJersey)
     }).catch(err => console.error("Error adding jersey on backend database", err));
     
@@ -450,7 +624,10 @@ export default function App() {
 
     fetch('/api/jerseys', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-admin-passcode': 'admin2026'
+      },
       body: JSON.stringify(editedJersey)
     }).catch(err => console.error("Error editing jersey on backend database", err));
     
@@ -470,7 +647,10 @@ export default function App() {
       setJerseysList(updated);
 
       fetch(`/api/jerseys/${id}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'x-admin-passcode': 'admin2026'
+        }
       }).catch(err => console.error("Error deleting jersey", err));
     }
   };
@@ -483,6 +663,8 @@ export default function App() {
         setBKashNumber={handleUpdateBKashNumber}
         nagadNumber={nagadNumber}
         setNagadNumber={handleUpdateNagadNumber}
+        whatsappNumber={whatsappNumber}
+        setWhatsappNumber={handleUpdateWhatsappNumber}
         activeOrderCount={orders.length}
         scrollToSection={scrollToSection}
         isAdmin={isAdmin}
@@ -525,7 +707,8 @@ export default function App() {
               className="inline-flex items-center gap-2 bg-zinc-900/90 border border-white/10 px-4 py-2 rounded-full text-xs font-bold text-zinc-300 backdrop-blur shadow-xl hover:border-emerald-500/30 transition-all"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="font-mono text-emerald-400 uppercase tracking-widest text-[9px] font-black mr-1">খেলার মূল গর্ব</span>
+              <span className="text-[10px] font-display font-extrabold uppercase tracking-widest text-emerald-400">NAFI JERSEY HOUSE</span>
+              <span className="text-zinc-650">|</span>
               <span className="text-[11px] text-zinc-300">Premium World National Jerseys Active</span>
             </motion.div>
 
@@ -533,7 +716,7 @@ export default function App() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="text-4xl sm:text-6xl lg:text-8xl font-sans font-black tracking-tighter text-white mt-8 max-w-5xl mx-auto leading-none uppercase"
+              className="text-4xl sm:text-6xl lg:text-8xl font-display font-extrabold tracking-tighter text-white mt-8 max-w-5xl mx-auto leading-none uppercase"
             >
               Wear the Pride Of Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-emerald-400 drop-shadow-sm">Nation In 2026</span> Style
             </motion.h2>
@@ -590,14 +773,14 @@ export default function App() {
           </div>
         </section>
 
-         {/* Outer Catalog Section */}
-        <section id="shop" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-16 scroll-mt-24 font-sans">
+         <section id="shop" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-16 scroll-mt-24 font-sans">
           <div className="text-center sm:text-left mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div>
-              <span className="font-mono text-xs text-emerald-400 tracking-widest uppercase font-bold">
+              <span className="font-mono text-xs text-emerald-400 tracking-widest uppercase font-black flex items-center gap-1.5 justify-center sm:justify-start">
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping"></span>
                 Premium National Selection
               </span>
-              <h3 className="text-2xl sm:text-4xl font-black text-white mt-1.5 tracking-tight uppercase">
+              <h3 className="text-2xl sm:text-4xl font-display font-extrabold text-white mt-1.5 tracking-tighter uppercase">
                 Official 2026 Jerseys Gallery
               </h3>
             </div>
@@ -608,21 +791,21 @@ export default function App() {
                 <button
                   id="admin-add-jersey-btn"
                   onClick={() => setShowAddModal(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider rounded-sm shadow-xl active:scale-95 transition-all"
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider rounded shadow-xl active:scale-95 transition-all"
                 >
                   <PlusCircle className="w-4.5 h-4.5" />
                   <span>Add New Jersey</span>
                 </button>
               )}
 
-              <span className="text-[9px] bg-emerald-500/10 text-emerald-400 font-mono border border-emerald-500/20 px-3 py-1.5 rounded-sm flex items-center gap-1 uppercase tracking-wider font-bold">
-                <Truck className="w-3.5 h-3.5" /> FREE DELIVERY IN BD
+              <span className="text-[9px] bg-emerald-500/10 text-emerald-400 font-mono border border-emerald-500/25 px-3.5 py-2 rounded-full flex items-center gap-1.5 uppercase tracking-wider font-bold shadow-inner">
+                <Truck className="w-3.5 h-3.5 text-emerald-400" /> FREE DELIVERY IN BD
               </span>
             </div>
           </div>
 
           {/* Interactive Gallery Navigation Bar */}
-          <div className="bg-[#141414] border border-white/10 p-4 rounded-xl mb-10 space-y-4 md:space-y-0 md:flex md:items-center md:justify-between md:gap-6">
+          <div className="bg-[#111111]/85 backdrop-blur border border-white/10 p-5 rounded-2xl mb-10 space-y-4 md:space-y-0 md:flex md:items-center md:justify-between md:gap-6 shadow-2xl">
             {/* Filter Tabs */}
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 mr-2 flex items-center gap-1">
@@ -721,20 +904,39 @@ export default function App() {
 
         {/* Rules & Workflow Segment */}
         <section id="rules" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-24 scroll-mt-24">
-          <RulesCard />
+          <RulesCard
+            bKashNumber={bKashNumber}
+            nagadNumber={nagadNumber}
+            bKashQR={bKashQR}
+            nagadQR={nagadQR}
+            isAdmin={isAdmin}
+            onUpdateQR={handleUpdateQR}
+          />
         </section>
 
         {/* Admin Visitor Traffic & Audience Monitor Section */}
         {isAdmin && (
-          <section id="traffic-monitor" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-24 scroll-mt-24">
-            <VisitorTracker
-              viewsCount={viewsCount}
-              visitorLogs={visitorLogs}
-              onClearLogs={handleClearLogs}
-              onAddTestVisitor={handleAddTestVisitor}
-              onResetViews={handleResetViewsCount}
-            />
-          </section>
+          <>
+            <section id="traffic-monitor" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-24 scroll-mt-24">
+              <VisitorTracker
+                viewsCount={viewsCount}
+                visitorLogs={visitorLogs}
+                onClearLogs={handleClearLogs}
+                onAddTestVisitor={handleAddTestVisitor}
+                onResetViews={handleResetViewsCount}
+              />
+            </section>
+
+            <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12">
+              <AutomationHub
+                webhookUrl={webhookUrl}
+                webhookLogs={webhookLogs}
+                onUpdateWebhookUrl={handleUpdateWebhookUrl}
+                onClearWebhookLogs={handleClearWebhookLogs}
+                onTestDispatch={handleTestDispatch}
+              />
+            </section>
+          </>
         )}
 
 
@@ -762,6 +964,9 @@ export default function App() {
                 preselectedSize="M"
                 bKashNumber={bKashNumber}
                 nagadNumber={nagadNumber}
+                whatsappNumber={whatsappNumber}
+                bKashQR={bKashQR}
+                nagadQR={nagadQR}
                 onOrderSubmit={handleCreateOrder}
                 jerseysList={jerseysList}
               />
@@ -769,12 +974,23 @@ export default function App() {
 
             {/* Live Client Dashboard Ledger Board */}
             <div id="orders" className="lg:col-span-5 space-y-6 scroll-mt-24">
-              <div className="bg-[#141414] border border-white/10 rounded-xl p-6 shadow-2xl">
-                <OrdersList
-                  orders={orders}
-                  onOrderUpdate={handleUpdateOrdersList}
-                />
-              </div>
+              <SecureOrdersPanel
+                isAdmin={isAdmin}
+                orders={orders}
+                personalOrders={personalOrders}
+                onOrderUpdate={handleUpdateOrdersList}
+                onPersonalOrderDelete={(id) => {
+                  const updated = personalOrders.filter(o => o.id !== id);
+                  setPersonalOrders(updated);
+                  if (typeof window !== 'undefined') {
+                    try {
+                      localStorage.setItem('my_orders_history', JSON.stringify(updated));
+                    } catch (e) {
+                      console.error(e);
+                    }
+                  }
+                }}
+              />
 
               {/* Store contact credentials box */}
               <div className="bg-gradient-to-tr from-black to-[#052818] border border-white/10 rounded-xl p-6 text-center space-y-4 relative overflow-hidden font-sans">
@@ -828,6 +1044,9 @@ export default function App() {
                   preselectedSize={checkoutSize}
                   bKashNumber={bKashNumber}
                   nagadNumber={nagadNumber}
+                  whatsappNumber={whatsappNumber}
+                  bKashQR={bKashQR}
+                  nagadQR={nagadQR}
                   onOrderSubmit={handleCreateOrder}
                   jerseysList={jerseysList}
                   onClose={() => setShowCheckoutModal(false)}
@@ -1258,7 +1477,7 @@ export default function App() {
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <div className="flex items-center gap-2">
               <h5 className="text-sm font-bold text-zinc-300 uppercase tracking-wider">
-                NAFI.JERSEY<span className="text-emerald-400">.HOUSE</span>
+                NAFI JERSEY HOUSE
               </h5>
               <span className="text-zinc-700">|</span>
               <p className="text-[9px] text-zinc-500 font-mono tracking-widest uppercase">

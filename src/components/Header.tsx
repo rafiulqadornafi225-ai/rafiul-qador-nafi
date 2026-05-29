@@ -7,6 +7,8 @@ interface HeaderProps {
   setBKashNumber: (num: string) => void;
   nagadNumber: string;
   setNagadNumber: (num: string) => void;
+  whatsappNumber: string;
+  setWhatsappNumber: (num: string) => void;
   activeOrderCount: number;
   scrollToSection: (id: string) => void;
   isAdmin: boolean;
@@ -19,6 +21,8 @@ export default function Header({
   setBKashNumber,
   nagadNumber,
   setNagadNumber,
+  whatsappNumber,
+  setWhatsappNumber,
   activeOrderCount,
   scrollToSection,
   isAdmin,
@@ -34,6 +38,7 @@ export default function Header({
   
   const [tempB, setTempB] = useState(bKashNumber);
   const [tempN, setTempN] = useState(nagadNumber);
+  const [tempW, setTempW] = useState(whatsappNumber);
 
   useEffect(() => {
     setTempB(bKashNumber);
@@ -42,6 +47,10 @@ export default function Header({
   useEffect(() => {
     setTempN(nagadNumber);
   }, [nagadNumber]);
+
+  useEffect(() => {
+    setTempW(whatsappNumber);
+  }, [whatsappNumber]);
 
   const handleCopyB = () => {
     navigator.clipboard.writeText(bKashNumber);
@@ -76,6 +85,7 @@ export default function Header({
     e.preventDefault();
     setBKashNumber(tempB.trim());
     setNagadNumber(tempN.trim());
+    setWhatsappNumber(tempW.trim());
     setShowEdit(false);
   };
 
@@ -142,16 +152,15 @@ export default function Header({
       </div>
 
       {/* Main Navigation Header */}
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-          <div className="relative flex items-center justify-center w-10 h-10 bg-gradient-to-tr from-[#312e81] to-emerald-700 rounded-sm shadow-md">
-            <Flame className="w-5.5 h-5.5 text-white" />
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-4.5 flex items-center justify-between">
+        <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+          <div className="relative flex items-center justify-center w-11 h-11 bg-gradient-to-tr from-indigo-700 via-indigo-900 to-emerald-600 rounded-xl shadow-lg border border-white/10 group-hover:border-emerald-500/30 transition-all duration-300">
+            <Flame className="w-5.5 h-5.5 text-white animate-pulse" />
           </div>
           <div>
-            <h1 className="text-xl md:text-2xl font-black font-sans tracking-tighter text-white uppercase">
-              NAFI.JERSEY<span className="text-emerald-400">.HOUSE</span>
+            <h1 className="text-xl md:text-2xl font-display font-black tracking-tight text-white uppercase">
+              NAFI JERSEY HOUSE
             </h1>
-            <p className="text-[9px] text-zinc-400 font-mono tracking-widest uppercase">Elite Sportswear 2026</p>
           </div>
         </div>
 
@@ -259,7 +268,7 @@ export default function Header({
             exit={{ opacity: 0, y: -10 }}
             className="absolute top-full left-0 w-full bg-zinc-950 border-b border-white/15 py-5 px-4 shadow-2xl flex items-center justify-center z-50"
           >
-            <form onSubmit={handleSave} className="flex flex-col md:flex-row items-end gap-4 w-full max-w-2xl font-sans">
+            <form onSubmit={handleSave} className="flex flex-col md:flex-row items-end gap-4 w-full max-w-3xl font-sans">
               <div className="flex-1 w-full">
                 <label className="block text-[10px] font-mono text-zinc-400 uppercase mb-1">
                   Active Cash bKash Number
@@ -284,13 +293,26 @@ export default function Header({
                   required
                 />
               </div>
-              <div className="flex gap-2 w-full md:w-auto mt-2">
+              <div className="flex-1 w-full">
+                <label className="block text-[10px] font-mono text-[#25d366] uppercase mb-1 font-bold">
+                  Owner WhatsApp Number
+                </label>
+                <input
+                  type="text"
+                  value={tempW}
+                  onChange={(e) => setTempW(e.target.value)}
+                  className="w-full bg-[#141414] text-white font-mono text-xs px-3 py-2 border border-[#25d366]/30 rounded-sm focus:outline-none focus:border-[#25d366]"
+                  placeholder="e.g. 01402580064"
+                  required
+                />
+              </div>
+              <div className="flex gap-2 w-full md:w-auto mt-2 shrink-0">
                 <button
                   id="bKash-save-btn"
                   type="submit"
                   className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-widest px-4 py-2.5 rounded-sm active:scale-95 transition-all whitespace-nowrap"
                 >
-                  Save Numbers
+                  Save settings
                 </button>
                 <button
                   id="bKash-cancel-btn"
@@ -298,6 +320,7 @@ export default function Header({
                   onClick={() => {
                     setTempB(bKashNumber);
                     setTempN(nagadNumber);
+                    setTempW(whatsappNumber);
                     setShowEdit(false);
                   }}
                   className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[10px] font-bold uppercase tracking-widest px-3 py-2.5 rounded-sm transition-all whitespace-nowrap"
@@ -360,9 +383,6 @@ export default function Header({
                       {loginError}
                     </p>
                   )}
-                  <p className="text-zinc-600 text-[9px] mt-2 text-center font-mono">
-                    passcode hint: admin2026
-                  </p>
                 </div>
 
                 <div className="flex gap-2 pt-2">

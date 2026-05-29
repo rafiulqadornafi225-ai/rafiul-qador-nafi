@@ -147,10 +147,10 @@ export default function JerseyCard({ jersey, onBuyNow, isAdmin, onEdit, onDelete
           <button
             id={`buy-btn-${jersey.id}`}
             onClick={() => onBuyNow(jersey, selectedSize)}
-            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold uppercase tracking-wider px-5 py-3 rounded shadow-xl active:scale-95 transition-all outline-none"
+            className="flex items-center gap-2.5 bg-gradient-to-r from-emerald-600 to-teal-650 hover:from-emerald-500 hover:to-teal-550 text-white text-[11px] font-black uppercase tracking-wider px-5.5 py-3.5 rounded-xl shadow-lg shadow-emerald-950/40 hover:shadow-emerald-500/20 hover:scale-[1.03] active:scale-95 transition-all duration-300 outline-none cursor-pointer"
           >
-            <ShoppingCart className="w-3.5 h-3.5" />
-            <span>Buy Now</span>
+            <ShoppingCart className="w-3.5 h-3.5 shrink-0" />
+            <span>Order Now</span>
           </button>
         </div>
       </div>

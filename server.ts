@@ -51,11 +51,27 @@ interface VisitorLog {
 interface DBState {
   bKashNumber: string;
   nagadNumber: string;
+  bKashQR?: string | null;
+  nagadQR?: string | null;
   jerseys: Jersey[];
   orders: Order[];
   viewsCount: number;
   visitorLogs: VisitorLog[];
+  webhookUrl?: string | null;
+  whatsappNumber?: string | null;
 }
+
+interface IntegrationLog {
+  id: string;
+  orderId: string;
+  timestamp: string;
+  webhookUrl: string;
+  success: boolean;
+  statusText: string;
+  payload: any;
+}
+
+let integrationLogs: IntegrationLog[] = [];
 
 const DEFAULT_JERSEYS: Jersey[] = [
   {
@@ -189,10 +205,14 @@ const DB_FILE = path.join(process.cwd(), "db.json");
 let state: DBState = {
   bKashNumber: '01402580064',
   nagadNumber: '01402580064',
+  bKashQR: null,
+  nagadQR: null,
   jerseys: DEFAULT_JERSEYS,
   orders: [],
   viewsCount: 147,
-  visitorLogs: SEED_LOGS
+  visitorLogs: SEED_LOGS,
+  webhookUrl: null,
+  whatsappNumber: '01402580064'
 };
 
 // Helper load/save database state asynchronously
@@ -230,22 +250,55 @@ async function startServer() {
   // Directly serve image assets in both development and production under their asset paths
   app.use('/src/assets/images', express.static(path.join(process.cwd(), 'src/assets/images')));
 
-  // API 1: Fetch entire store configuration
+  const isAdminAuthorized = (req: express.Request): boolean => {
+    return req.headers["x-admin-passcode"] === "admin2026";
+  };
+
+  // API 1: Fetch store configuration (Censored for public visitors to protect user privacy)
   app.get("/api/config", (req, res) => {
-    res.json(state);
+    const isAuthorized = isAdminAuthorized(req);
+    res.json({
+      bKashNumber: state.bKashNumber,
+      nagadNumber: state.nagadNumber,
+      bKashQR: state.bKashQR,
+      nagadQR: state.nagadQR,
+      whatsappNumber: state.whatsappNumber,
+      jerseys: state.jerseys,
+      viewsCount: state.viewsCount,
+      // Private/Sensitive properties returned ONLY if admin passcode header is validated
+      orders: isAuthorized ? state.orders : [],
+      visitorLogs: isAuthorized ? state.visitorLogs : [],
+      webhookUrl: isAuthorized ? state.webhookUrl : null
+    });
   });
 
-  // API 2: Submit a payment wallet update
+  // API 2: Submit a payment wallet update (requires authorization)
   app.post("/api/config/payment", async (req, res) => {
-    const { bKashNumber, nagadNumber } = req.body;
+    if (!isAdminAuthorized(req)) {
+      return res.status(401).json({ error: "Unauthorized access" });
+    }
+    const { bKashNumber, nagadNumber, bKashQR, nagadQR, whatsappNumber } = req.body;
     if (bKashNumber !== undefined) state.bKashNumber = bKashNumber;
     if (nagadNumber !== undefined) state.nagadNumber = nagadNumber;
+    if (bKashQR !== undefined) state.bKashQR = bKashQR;
+    if (nagadQR !== undefined) state.nagadQR = nagadQR;
+    if (whatsappNumber !== undefined) state.whatsappNumber = whatsappNumber;
     await saveState();
-    res.json({ success: true, bKashNumber: state.bKashNumber, nagadNumber: state.nagadNumber });
+    res.json({ 
+      success: true, 
+      bKashNumber: state.bKashNumber, 
+      nagadNumber: state.nagadNumber,
+      bKashQR: state.bKashQR,
+      nagadQR: state.nagadQR,
+      whatsappNumber: state.whatsappNumber
+    });
   });
 
-  // API 3: Save, Add, or Edit catalog jerseys
+  // API 3: Save, Add, or Edit catalog jerseys (requires authorization)
   app.post("/api/jerseys", async (req, res) => {
+    if (!isAdminAuthorized(req)) {
+      return res.status(401).json({ error: "Unauthorized access" });
+    }
     const freshJersey: Jersey = req.body;
     if (!freshJersey || !freshJersey.id) {
       return res.status(400).json({ error: "Missing jersey parameter details" });
@@ -264,15 +317,18 @@ async function startServer() {
     res.json({ success: true, jerseys: state.jerseys });
   });
 
-  // API 4: Delete catalog jersey
+  // API 4: Delete catalog jersey (requires authorization)
   app.delete("/api/jerseys/:id", async (req, res) => {
+    if (!isAdminAuthorized(req)) {
+      return res.status(401).json({ error: "Unauthorized access" });
+    }
     const { id } = req.params;
     state.jerseys = state.jerseys.filter(j => j.id !== id);
     await saveState();
     res.json({ success: true, jerseys: state.jerseys });
   });
 
-  // API 5: Create customer transaction order
+  // API 5: Create customer transaction order with automatic notification forwarding
   app.post("/api/orders", async (req, res) => {
     const order: Order = req.body;
     if (!order || !order.id) {
@@ -281,11 +337,209 @@ async function startServer() {
 
     state.orders = [order, ...state.orders];
     await saveState();
-    res.json({ success: true, orders: state.orders });
+
+    // Trigger Outgoing Webhook integration if configured
+    if (state.webhookUrl) {
+      try {
+        const orderInfo = order;
+        const textMessage = `🔔 *New Order Confirmed - Nafi Jersey House* \n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `👤 *Customer Name:* ${orderInfo.customerName || 'N/A'}\n` +
+          `📞 *Phone Number:* ${orderInfo.customerPhone || 'N/A'}\n` +
+          `👕 *Jersey Ordered:* ${orderInfo.jerseyName} (Size: ${orderInfo.size || 'N/A'})\n` +
+          `🔢 *Quantity:* ${orderInfo.quantity} pcs\n` +
+          `💰 *Total Price Paid:* BDT ${orderInfo.amount}\n` +
+          `💳 *Payment Wallet:* ${orderInfo.paymentMethod}\n` +
+          `⚡ *Transaction ID:* ${orderInfo.transactionId}\n` +
+          `📅 *Timestamp:* ${orderInfo.timestamp || new Date().toLocaleString()}\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━ \n` +
+          `*Note:* Please check your mobile statements for bKash/Nagad and verify that the Transaction ID matching matches perfectly!`;
+
+        const payload = {
+          content: textMessage,
+          text: textMessage,
+          event: "order_submission",
+          timestamp: new Date().toISOString(),
+          order: orderInfo
+        };
+
+        const response = await fetch(state.webhookUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const success = response.ok;
+        const statusText = `${response.status} ${response.statusText}`;
+
+        integrationLogs.unshift({
+          id: `wlog-${Date.now()}`,
+          orderId: orderInfo.id,
+          timestamp: new Date().toLocaleTimeString(),
+          webhookUrl: state.webhookUrl,
+          success,
+          statusText,
+          payload
+        });
+
+        if (integrationLogs.length > 20) {
+          integrationLogs = integrationLogs.slice(0, 20);
+        }
+      } catch (err: any) {
+        console.error("Failed to dispatcher webhook order notify:", err);
+        integrationLogs.unshift({
+          id: `wlog-${Date.now()}`,
+          orderId: order.id,
+          timestamp: new Date().toLocaleTimeString(),
+          webhookUrl: state.webhookUrl,
+          success: false,
+          statusText: err.message || "Network Error",
+          payload: { error: err.message }
+        });
+      }
+    }
+
+    res.json({ success: true, orders: isAdminAuthorized(req) ? state.orders : [] });
   });
 
-  // API 6: Update orders list (status changes, deletions by admin)
+  // API 5b: Secure order lookup for specific customer query (Requires EXACT Order ID AND Phone Number)
+  app.get("/api/orders/lookup", (req, res) => {
+    const { id, phone } = req.query;
+    if (!id || !phone) {
+      return res.status(400).json({ error: "Order ID and Customer Phone number are required." });
+    }
+    
+    const cleanId = String(id).trim().toLowerCase();
+    const cleanPhone = String(phone).trim();
+    
+    const matched = state.orders.find(o => 
+      o.id.toLowerCase() === cleanId && 
+      o.customerPhone.trim() === cleanPhone
+    );
+    
+    if (!matched) {
+      return res.status(404).json({ error: "No matching transaction recorded. Please double check details." });
+    }
+    
+    res.json({ success: true, order: matched });
+  });
+
+  // API 11: Save webhook automation URL config (Requires Authorization)
+  app.post("/api/config/webhook", async (req, res) => {
+    if (!isAdminAuthorized(req)) {
+      return res.status(401).json({ error: "Unauthorized access" });
+    }
+    const { webhookUrl } = req.body;
+    state.webhookUrl = webhookUrl === "" ? null : webhookUrl;
+    await saveState();
+    res.json({ success: true, webhookUrl: state.webhookUrl });
+  });
+
+  // API 12: Fetch log entries of webhook dispatches (Requires Authorization)
+  app.get("/api/integration/logs", (req, res) => {
+    if (!isAdminAuthorized(req)) {
+      return res.status(401).json({ error: "Unauthorized access" });
+    }
+    res.json({ logs: integrationLogs });
+  });
+
+  // API 13: Clear integration logs (Requires Authorization)
+  app.post("/api/integration/logs/clear", (req, res) => {
+    if (!isAdminAuthorized(req)) {
+      return res.status(401).json({ error: "Unauthorized access" });
+    }
+    integrationLogs = [];
+    res.json({ success: true, logs: [] });
+  });
+
+  // API 14: Dispatch a manual Test payload immediately (Requires Authorization)
+  app.post("/api/integration/test", async (req, res) => {
+    if (!isAdminAuthorized(req)) {
+      return res.status(401).json({ error: "Unauthorized access" });
+    }
+    const demoPayload = {
+      id: `DEMO-${Math.floor(1000 + Math.random() * 9000).toString()}`,
+      jerseyId: 'brazil-2026',
+      jerseyName: 'Brazil 2026 Authentic Home Jersey',
+      countryName: 'Brazil',
+      size: 'L',
+      quantity: 1,
+      customerName: 'Mr. Test Buyer (Demo Order)',
+      customerPhone: '01700112233',
+      paymentMethod: 'bKash',
+      transactionId: 'TRX777DEMOMATCH',
+      amount: 1450,
+      timestamp: new Date().toLocaleString(),
+      status: 'Pending Verification'
+    };
+
+    if (!state.webhookUrl) {
+      return res.status(400).json({ error: "Please configure a Webhook URL first!" });
+    }
+
+    try {
+      const textMessage = `🔔 *[TEST DISPATCH] New Order Confirmed - Nafi Jersey House* \n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        `👤 *Customer Name:* ${demoPayload.customerName}\n` +
+        `📞 *Phone Number:* ${demoPayload.customerPhone}\n` +
+        `👕 *Jersey Ordered:* ${demoPayload.jerseyName} (Size: ${demoPayload.size})\n` +
+        `🔢 *Quantity:* ${demoPayload.quantity} pcs\n` +
+        `💰 *Total Price Paid:* BDT ${demoPayload.amount}\n` +
+        `💳 *Payment Wallet:* ${demoPayload.paymentMethod}\n` +
+        `⚡ *Transaction ID:* ${demoPayload.transactionId}\n` +
+        `📅 *Timestamp:* ${demoPayload.timestamp}\n` +
+        `━━━━━━━━━━━━━━━━━━━━━━━━ \n` +
+        `⚠️ *Status:* Connection confirmed. This simulated test matches real checkout flows!`;
+
+      const payload = {
+        content: textMessage,
+        text: textMessage,
+        event: "test_dispatch",
+        timestamp: new Date().toISOString(),
+        order: demoPayload
+      };
+
+      const response = await fetch(state.webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      const success = response.ok;
+      const statusText = `${response.status} ${response.statusText}`;
+
+      integrationLogs.unshift({
+        id: `wlog-${Date.now()}`,
+        orderId: demoPayload.id,
+        timestamp: new Date().toLocaleTimeString(),
+        webhookUrl: state.webhookUrl,
+        success,
+        statusText,
+        payload
+      });
+
+      return res.json({ success, statusText });
+    } catch (err: any) {
+      integrationLogs.unshift({
+        id: `wlog-${Date.now()}`,
+        orderId: demoPayload.id,
+        timestamp: new Date().toLocaleTimeString(),
+        webhookUrl: state.webhookUrl,
+        success: false,
+        statusText: err.message || "Connection failed",
+        payload: { error: err.message }
+      });
+      return res.status(500).json({ error: err.message || "Webhook delivery failed" });
+    }
+  });
+
+  // API 6: Update orders list (status changes, deletions by admin) (Requires Authorization)
   app.post("/api/orders/update-list", async (req, res) => {
+    if (!isAdminAuthorized(req)) {
+      return res.status(401).json({ error: "Unauthorized access" });
+    }
     const { orders } = req.body;
     if (!Array.isArray(orders)) {
       return res.status(400).json({ error: "Expected array of orders" });
@@ -300,6 +554,9 @@ async function startServer() {
     const { logs, singleLog, actionUpdate, sessionId, customName } = req.body;
     
     if (Array.isArray(logs)) {
+      if (!isAdminAuthorized(req)) {
+        return res.status(401).json({ error: "Unauthorized access" });
+      }
       state.visitorLogs = logs;
     } else if (singleLog) {
       // Insert single visitor log at head
@@ -319,11 +576,15 @@ async function startServer() {
     }
 
     await saveState();
-    res.json({ success: true, visitorLogs: state.visitorLogs });
+    // Return logs ONLY to authorized admin, empty arrays to other connections
+    res.json({ success: true, visitorLogs: isAdminAuthorized(req) ? state.visitorLogs : [] });
   });
 
-  // API 8: Clear visitor logs tracker
+  // API 8: Clear visitor logs tracker (Requires Authorization)
   app.post("/api/visitor-logs/clear", async (req, res) => {
+    if (!isAdminAuthorized(req)) {
+      return res.status(401).json({ error: "Unauthorized access" });
+    }
     const { activeLogId } = req.body;
     const activeLog = state.visitorLogs.find(l => l.id === activeLogId);
     state.visitorLogs = activeLog ? [activeLog] : [];
@@ -338,8 +599,11 @@ async function startServer() {
     res.json({ success: true, viewsCount: state.viewsCount });
   });
 
-  // API 10: Reset cumulative views
+  // API 10: Reset cumulative views (Requires Authorization)
   app.post("/api/views/reset", async (req, res) => {
+    if (!isAdminAuthorized(req)) {
+      return res.status(401).json({ error: "Unauthorized access" });
+    }
     state.viewsCount = 1;
     await saveState();
     res.json({ success: true, viewsCount: state.viewsCount });

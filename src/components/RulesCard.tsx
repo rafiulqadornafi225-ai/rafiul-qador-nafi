@@ -1,12 +1,57 @@
-import { Send, Smartphone, ShieldCheck, CheckCircle, ArrowRight, MapPin } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Send, Smartphone, ShieldCheck, CheckCircle, ArrowRight, MapPin, QrCode, Upload, RefreshCw, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 
-export default function RulesCard() {
+interface RulesCardProps {
+  bKashNumber: string;
+  nagadNumber: string;
+  bKashQR: string | null;
+  nagadQR: string | null;
+  isAdmin: boolean;
+  onUpdateQR: (type: 'bKash' | 'Nagad', data: string | null) => void;
+}
+
+export default function RulesCard({ bKashNumber, nagadNumber, bKashQR, nagadQR, isAdmin, onUpdateQR }: RulesCardProps) {
+
+  const [copiedType, setCopiedType] = useState<'bKash' | 'Nagad' | null>(null);
+
+  const handleCopyAndRedirect = (type: 'bKash' | 'Nagad', num: string) => {
+    navigator.clipboard.writeText(num.trim());
+    setCopiedType(type);
+    setTimeout(() => {
+      setCopiedType(null);
+    }, 3000);
+    
+    // Redirect to app portals for seamless conversion
+    const targetUrl = type === 'bKash' ? 'https://www.bkash.com/app/' : 'https://www.nagad.com.bd';
+    window.open(targetUrl, '_blank');
+  };
+
+  const handleQRUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'bKash' | 'Nagad') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64Data = reader.result as string;
+      onUpdateQR(type, base64Data);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleClearQR = (type: 'bKash' | 'Nagad') => {
+    onUpdateQR(type, null);
+  };
+
+  // Safe encoding for bKash/Nagad scan payload text - STRICTLY raw number for direct wallet app support!
+  const bKashGeneratedURL = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&color=230-22-115&data=${encodeURIComponent(bKashNumber.trim())}`;
+  const nagadGeneratedURL = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&color=242-121-32&data=${encodeURIComponent(nagadNumber.trim())}`;
+
   const steps = [
     {
       icon: <Smartphone className="w-6 h-6 text-emerald-400" />,
       title: "1. Make Payment via Cash (bKash / Nagad)",
-      description: "Send the total price amount of your desired 2026 jerseys to our active personal wallets: bKash (01402580064) or Nagad (01402580064) shown in the store top bar."
+      description: `Send the total price amount of your desired jerseys to our active personal wallets: bKash (${bKashNumber}) or Nagad (${nagadNumber}) shown in the store top bar.`
     },
     {
       icon: <ShieldCheck className="w-6 h-6 text-indigo-300" />,
@@ -29,11 +74,11 @@ export default function RulesCard() {
           <span className="font-mono text-[9px] text-emerald-400 tracking-widest uppercase bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded font-extrabold">
             TERMS & HOW TO ORDER
           </span>
-          <h3 className="text-2xl md:text-4xl font-black text-white mt-4 tracking-tighter uppercase">
-            Official 2026 Order Guidelines
+          <h3 className="text-2xl md:text-4xl font-display font-black text-white mt-4 tracking-tighter uppercase">
+            Official Order Guidelines
           </h3>
           <p className="text-xs text-zinc-400 mt-2.5 max-w-2xl leading-relaxed">
-            Follow these elite streamlined guidelines to guarantee your 2026 soccer jersey order gets processed and dispatched immediately. All submissions undergo manual bKash/Nagad validation checks.
+            Follow these elite streamlined guidelines to guarantee your soccer jersey order gets processed and dispatched immediately. All submissions undergo manual bKash/Nagad validation checks.
           </p>
         </div>
 
@@ -44,7 +89,7 @@ export default function RulesCard() {
             <span className="font-mono text-[9px] text-indigo-400 tracking-widest uppercase font-bold block mb-1">
               Store Dispatch Headquarters
             </span>
-            <p className="font-bold text-white uppercase text-[10px]">NAFI Jersey House Hub</p>
+            <p className="font-bold text-white uppercase text-[10px]">NAFI JERSEY HOUSE Hub</p>
             <p className="text-zinc-400 mt-1 leading-relaxed">
               Mirpur, Dhaka, Bangladesh.
             </p>
@@ -82,12 +127,12 @@ export default function RulesCard() {
       </div>
 
       {/* Payment details notice */}
-      <div className="bg-emerald-950/10 border border-emerald-500/20 p-5 rounded-xl my-6 text-xs leading-relaxed text-zinc-355 shadow-inner">
+      <div className="bg-emerald-950/10 border border-emerald-500/20 p-5 rounded-xl my-6 text-xs leading-relaxed text-zinc-350 shadow-inner">
         <h5 className="font-bold text-emerald-400 uppercase tracking-wider mb-2 text-[11px] flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block text-emerald-400"></span>
           Payment Notice & Wallets
         </h5>
-         For bKash or Nagad transfers, our active mobile payment numbers are fully set up for direct peer-to-peer personal transfers. You can securely transfer your dues using either service shown in our store's top dashboard bar. Take a screenshot or copy your TRX ID instantly.
+         For bKash or Nagad transfers, our active mobile payment numbers are fully set up for direct peer-to-peer personal transfers. You can securely transfer your dues via manual send money. Please double-check transaction information before confirmation.
       </div>
 
       {/* Warning Rule Alert Box */}

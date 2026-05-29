@@ -8,6 +8,9 @@ interface OrderFormProps {
   preselectedSize: string;
   bKashNumber: string;
   nagadNumber: string;
+  whatsappNumber?: string | null;
+  bKashQR?: string | null;
+  nagadQR?: string | null;
   onOrderSubmit: (order: Order) => void;
   onClose?: () => void;
   jerseysList: Jersey[]; // Let's support custom uploaded list
@@ -18,6 +21,9 @@ export default function OrderForm({
   preselectedSize,
   bKashNumber,
   nagadNumber,
+  whatsappNumber = null,
+  bKashQR = null,
+  nagadQR = null,
   onOrderSubmit,
   onClose,
   jerseysList,
@@ -39,6 +45,17 @@ export default function OrderForm({
   const [isSuccess, setIsSuccess] = useState(false);
   const [generatedOrder, setGeneratedOrder] = useState<Order | null>(null);
   const [copiedInvoiceText, setCopiedInvoiceText] = useState(false);
+  const [copiedType, setCopiedType] = useState<'bKash' | 'Nagad' | null>(null);
+
+  const handleCopyAndPay = (type: 'bKash' | 'Nagad', mobileNum: string) => {
+    navigator.clipboard.writeText(mobileNum.trim());
+    setCopiedType(type);
+    setTimeout(() => {
+      setCopiedType(null);
+    }, 3000);
+    const destination = type === 'bKash' ? 'https://www.bkash.com/app/' : 'https://www.nagad.com.bd';
+    window.open(destination, '_blank');
+  };
 
   useEffect(() => {
     if (preselectedJersey) {
@@ -93,6 +110,36 @@ export default function OrderForm({
     }, 1200);
   };
 
+  const getWhatsAppText = () => {
+    if (!generatedOrder) return '';
+    let text = `🔔 *নতুন অর্ডার কনফার্মেশন - NAFI JERSEY HOUSE*\n`;
+    text += `━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    text += `👤 *কাস্টমার নাম:* ${generatedOrder.customerName}\n`;
+    text += `📞 *মোবাইল নম্বর:* ${generatedOrder.customerPhone}\n`;
+    text += `👕 *জর্সি:* ${generatedOrder.jerseyName} (সাইজ: ${generatedOrder.size})\n`;
+    if (generatedOrder.customName || generatedOrder.customNumber) {
+      text += `✏️ *কাস্টম প্রিন্ট:* নাম "${generatedOrder.customName || 'N/A'}" | নম্বর "${generatedOrder.customNumber || 'N/A'}"\n`;
+    }
+    text += `🔢 *পরিমাণ:* ${generatedOrder.quantity} টি\n`;
+    text += `💰 *মোট বিল:* BDT ${generatedOrder.amount}\n`;
+    text += `💳 *পেমেন্ট মাধ্যম:* ${generatedOrder.paymentMethod}\n`;
+    text += `⚡ *ট্রানজেকশন আইডি (TrxID):* ${generatedOrder.transactionId}\n`;
+    text += `🏠 *ডেলিভারি ঠিকানা:* ${shippingAddress}\n`;
+    text += `━━ ━ ━ ━ ━ ━ ━ ━ ━ ━ ━ ━━\n`;
+    text += `*নোট:* কেউ কনফার্ম করেছে, টাকা পাঠানো হয়েছে। টাকা বিকাশের নম্বরের সাথে মিলছে কিনা, সেটা চেক করা হবে।`;
+    return text;
+  };
+
+  const getFormattedWhatsAppUrl = () => {
+    const rawNumber = (whatsappNumber || bKashNumber || '01402580064').trim();
+    let cleaned = rawNumber.replace(/\D/g, '');
+    if (cleaned.startsWith('01') && cleaned.length === 11) {
+      cleaned = '88' + cleaned;
+    }
+    const txt = getWhatsAppText();
+    return `https://wa.me/${cleaned}?text=${encodeURIComponent(txt)}`;
+  };
+
   const getFBMessengerText = () => {
     if (!generatedOrder) return '';
     let text = `Assalamu Alaikum, I just submitted a transaction on Jersey Bazaar!\n\nOrder ID: ${generatedOrder.id}\nJersey: ${generatedOrder.jerseyName} (Size: ${generatedOrder.size})`;
@@ -104,7 +151,7 @@ export default function OrderForm({
   };
 
   const copyInvoiceDetails = () => {
-    const text = getFBMessengerText();
+    const text = getWhatsAppText();
     if (text) {
       navigator.clipboard.writeText(text);
       setCopiedInvoiceText(true);
@@ -164,34 +211,46 @@ export default function OrderForm({
         <div className="space-y-4 max-w-md mx-auto">
           <button
             onClick={copyInvoiceDetails}
-            className="flex items-center justify-center gap-1.5 w-full bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-300 text-xs font-bold py-3 rounded-sm transition-all"
+            className="flex items-center justify-center gap-1.5 w-full bg-zinc-900 hover:bg-zinc-800 border border-white/10 text-zinc-300 text-xs font-bold py-3.5 rounded-sm transition-all"
           >
             {copiedInvoiceText ? (
               <>
                 <Check className="w-4.5 h-4.5 text-emerald-400" />
-                <span className="text-emerald-450">Copied to Clipboard!</span>
+                <span className="text-emerald-450">১. অর্ডার সামারি কপি হয়েছে!</span>
               </>
             ) : (
               <>
                 <Copy className="w-4.5 h-4.5" />
-                <span>1. Copy Transaction Summary</span>
+                <span>১. অর্ডার সামারি ক্লিক করে কপি করুন</span>
               </>
             )}
           </button>
+
+          {/* Primary WhatsApp Direct Dispatch button */}
+          <a
+            id="whatsapp-direct-confirm-btn"
+            href={getFormattedWhatsAppUrl()}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-center gap-2.5 w-full bg-[#25d366] hover:bg-[#20ba5a] text-zinc-950 text-xs font-black py-4 rounded-lg transition-all shadow-xl shadow-emerald-950/20 active:scale-95 uppercase tracking-wider"
+          >
+            <span className="w-2 h-2 rounded-full bg-zinc-950 animate-ping"></span>
+            <span>২. WhatsApp এ অর্ডার কনফার্ম করুন (অটো মেসেজ)</span>
+          </a>
 
           <a
             id="fb-messenger-launch-btn"
             href="https://www.facebook.com/share/1Bh4gYajWE/"
             target="_blank"
             rel="noreferrer"
-            className="flex items-center justify-center gap-2 w-full bg-[#1877f2] hover:bg-[#155fc3] text-white text-xs font-bold py-3.5 rounded-sm transition-all shadow-lg active:scale-95 uppercase tracking-wider"
+            className="flex items-center justify-center gap-2 w-full bg-[#1877f2] hover:bg-[#155fc3] text-white text-xs font-bold py-3 rounded-sm transition-all shadow-sm active:scale-95 uppercase tracking-wider opacity-85 hover:opacity-100"
           >
-            <MessageSquare className="w-4.5 h-4.5" />
-            <span>2. Open Facebook Page to Confirm</span>
+            <MessageSquare className="w-4 h-4" />
+            <span>অথবা, Facebook পেইজে কনফার্ম করুন</span>
           </a>
 
-          <p className="text-[10px] text-zinc-500 leading-relaxed font-mono">
-            *Required Rule: Realize your order dispatch by clicking the "Copy" button above, then click the "Open Facebook Page to Confirm" link and paste the details in our official support inbox. Thank you!
+          <p className="text-[10px] text-zinc-400 leading-relaxed font-sans mt-3">
+            💡 <strong>নির্দেশনা:</strong> উপরের **১ম বাটনে** ক্লিক করে অর্ডার তথ্য ক্লিপবোর্ডে কপি করুন। এরপর **২য় বাটনে** ক্লিক করলে সরাসরি আপনার WhatsApp ওপেন হবে, সেখানে পেস্ট করে মেসেজ পাঠিয়ে দিন। আমাদের পেমেন্ট ভেরিফিকেশন টিম দ্রুত অর্ডারটি প্রোসেস করে ডেলিভারি শুরু করবে!
           </p>
 
           <button
@@ -217,14 +276,14 @@ export default function OrderForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-[#141414] border border-white/10 p-6 rounded-xl relative font-sans">
+    <form onSubmit={handleSubmit} className="bg-[#0c0f0e]/95 backdrop-blur-xl border border-white/10 p-6 md:p-8 rounded-2xl relative font-sans shadow-2xl">
       <div className="flex items-center justify-between mb-6 pb-4 border-b border-white/10">
         <div>
-          <h3 className="text-lg font-black text-white tracking-tight uppercase">
+          <h3 className="text-xl font-display font-extrabold text-white tracking-tighter uppercase">
             Order & Transaction Ledger Log
           </h3>
-          <p className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest mt-0.5">
-            Peer Manual Audited Settlement
+          <p className="text-[9px] font-mono text-emerald-400 uppercase tracking-widest mt-1 font-bold">
+            ⚡ Peer Manual Audited Settlement
           </p>
         </div>
         {onClose && (
@@ -295,118 +354,59 @@ export default function OrderForm({
             />
           </div>
         </div>
-      </div>
-
-      {/* Payment details instructions */}
-      <div className="bg-black/60 border border-white/10 rounded-lg p-4 mb-5 space-y-3.5 text-xs text-zinc-300">
-        <div className="flex items-start gap-2">
-          <Smartphone className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-          <div>
-            <p className="font-bold text-white uppercase text-[10px] tracking-wider mb-1">
-              MOBILE WALLET ACCOUNT DETAILS (CASH TRANSFER METHOD):
+      </div>      {/* Payment details instructions */}
+      <div className="bg-[#0b0f0d] border border-emerald-500/20 rounded-2xl p-5 mb-5 space-y-4 text-xs text-zinc-300">
+        <div className="flex items-start gap-3">
+          <Smartphone className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5 animate-pulse" />
+          <div className="w-full">
+            <p className="font-display font-extrabold text-white uppercase text-[11px] tracking-wider mb-1.5 flex items-center gap-1.5 text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              মোবাইল ওয়ালেট পেমেন্ট নির্দেশিকা (Mobile Payment instructions)
             </p>
-            <p className="leading-relaxed">
-              To pay, please transfer exactly <span className="text-emerald-400 font-bold">BDT {totalPriceBDT}</span> (~${totalPriceUSD}) via Send Money or Cash Out to any of our active wallets:
+            <p className="leading-relaxed text-zinc-300">
+              অর্ডারটি সম্পূর্ণ করতে অনুগ্রহ করে মোট <span className="text-emerald-400 font-extrabold">BDT {totalPriceBDT}</span> (~${totalPriceUSD}) আমাদের নিচের যেকোনো একটি সচল নাম্বারে Send Money বা Cash Out করুন:
             </p>
             
-            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono">
-              <div className="bg-zinc-950 p-2 border border-white/5 rounded">
-                <span className="text-pink-400 font-sans font-bold text-[10px]">bKash: </span>
-                <span className="text-white font-bold">{bKashNumber}</span>
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono">
+              {/* bKash Area */}
+              <div className="bg-zinc-950 p-3.5 border border-pink-500/15 rounded-xl text-center space-y-2.5 relative overflow-hidden flex flex-col items-center">
+                <span className="text-pink-400 font-sans font-black text-[10px] tracking-wider uppercase">bKash Personal Info</span>
+                <span className="text-white font-extrabold text-sm tracking-wide select-all bg-black px-2 py-0.5 rounded border border-white/5">{bKashNumber}</span>
+                
+                {/* 2026 Direct Payment CTA Deep Link */}
+                <button
+                  type="button"
+                  onClick={() => handleCopyAndPay('bKash', bKashNumber)}
+                  className="w-full mt-1.5 inline-flex items-center justify-center gap-1.5 bg-[#e2127a] hover:bg-[#c20e64] text-white text-[10.5px] font-black uppercase tracking-wider py-2.5 rounded-lg transition-all shadow-md active:scale-95 duration-200"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                  {copiedType === 'bKash' ? '✓ নম্বর কপি করা হয়েছে...' : 'bKash পেমেন্ট করতে এখানে ক্লিক করুন'}
+                </button>
               </div>
-              <div className="bg-zinc-950 p-2 border border-white/5 rounded">
-                <span className="text-orange-400 font-sans font-bold text-[10px]">Nagad: </span>
-                <span className="text-white font-bold">{nagadNumber}</span>
+
+              {/* Nagad Area */}
+              <div className="bg-zinc-950 p-3.5 border border-orange-500/15 rounded-xl text-center space-y-2.5 relative overflow-hidden flex flex-col items-center">
+                <span className="text-orange-400 font-sans font-black text-[10px] tracking-wider uppercase">Nagad Personal Info</span>
+                <span className="text-white font-extrabold text-sm tracking-wide select-all bg-black px-2 py-0.5 rounded border border-white/5">{nagadNumber}</span>
+                
+                <button
+                  type="button"
+                  onClick={() => handleCopyAndPay('Nagad', nagadNumber)}
+                  className="w-full mt-1.5 inline-flex items-center justify-center gap-1.5 bg-[#f6921e] hover:bg-[#d57c13] text-white text-[10.5px] font-black uppercase tracking-wider py-2.5 rounded-lg transition-all shadow-md active:scale-95 duration-200"
+                >
+                  {copiedType === 'Nagad' ? '✓ নম্বর কপি করা হয়েছে...' : 'Nagad পেমেন্ট করতে এখানে ক্লিক করুন'}
+                </button>
               </div>
             </div>
 
-            <p className="mt-2 text-[11px] text-zinc-400 leading-relaxed">
-              * Our active wallet number is valid on both bKash and Nagad. You can complete payments to either mobile banking platform seamlessly.
+            <p className="mt-3.5 text-[10.5px] text-zinc-400 leading-relaxed bg-zinc-950/80 p-3 rounded-lg border border-white/5">
+              💡 **পেমেন্ট করার পর:** আপনার পেমেন্ট সফলভাবে সম্পন্ন হলে বিকাশ/নগদ থেকে প্রাপ্ত <span className="text-emerald-400 font-bold">Transaction ID (Trx ID)</span> নিচে সঠিক জর্সি সাইজ সহ ইনপুট বক্সে প্রদান করে ওয়ান-ক্লিক সাবমিট করুন। পেমেন্ট তথ্যটি ডাটাবেজে চিরকালের জন্য সংরক্ষিত হয়ে যাবে।
             </p>
           </div>
         </div>
       </div>
 
-      {/* Optional Jersey Printing Customization (Name & Number on Back) */}
-      <div className="bg-[#1c1c1c] border border-white/5 hover:border-emerald-500/30 rounded-lg p-4 mb-5 transition-all font-sans text-xs">
-        <span className="font-mono text-[9px] text-emerald-400 tracking-widest uppercase font-extrabold block mb-3 bg-emerald-500/10 px-2 py-1 rounded-sm w-fit">
-          ✨ OPTIONAL SPORT CUSTOMIZATION (FREE PRINTING SERVICE)
-        </span>
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
-          <div className="md:col-span-7 space-y-3.5">
-            <div>
-              <label className="block text-[9px] font-mono text-zinc-400 uppercase tracking-widest mb-1 font-bold">
-                Print Name on Back (COMPLETELY FREE SERVICE)
-              </label>
-              <input
-                id="order-custom-name"
-                type="text"
-                maxLength={15}
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value.toUpperCase())}
-                className="w-full bg-black text-white font-mono text-xs px-3 py-2.5 border border-white/10 focus:border-emerald-500 rounded-sm focus:outline-none uppercase"
-                placeholder="e.g. MESSI, SHAKIB"
-              />
-            </div>
-            <div>
-              <label className="block text-[9px] font-mono text-zinc-400 uppercase tracking-widest mb-1 font-bold">
-                Print Jersey Number on Back
-              </label>
-              <input
-                id="order-custom-number"
-                type="text"
-                maxLength={3}
-                value={customNumber}
-                onChange={(e) => setCustomNumber(e.target.value.replace(/[^0-9]/g, ''))}
-                className="w-full bg-black text-amber-400 font-mono text-xs font-bold px-3 py-2.5 border border-white/10 focus:border-emerald-500 rounded-sm focus:outline-none"
-                placeholder="e.g. 10 or 7"
-              />
-            </div>
-            <p className="text-[10px] text-zinc-500 leading-relaxed">
-              * If you do not want any name or number printed on the back of your jersey, simply leave these fields blank.
-            </p>
-          </div>
 
-          {/* Real-time Shirt Back Live Visualizer Preview Box */}
-          <div className="md:col-span-5 flex flex-col items-center justify-center pt-2">
-            <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest mb-3.5 font-bold block text-center">
-              ✏️ Live Custom Print Preview
-            </span>
-            <div className={`relative w-44 h-52 bg-gradient-to-b ${activeJersey?.bgGradient || 'from-zinc-900 via-zinc-950 to-black'} border border-white/10 rounded-2xl flex flex-col items-center justify-start pt-8 shadow-2xl overflow-hidden group transition-all duration-500 hover:border-emerald-500/30`}>
-              {/* Collar Stitch lines */}
-              <div className="absolute top-0 w-24 h-4 bg-zinc-800 rounded-b-xl border-b border-zinc-750 flex items-center justify-center">
-                <div className="w-12 h-[1px] bg-yellow-405/20 rounded-full"></div>
-              </div>
-              
-              {/* Arm holes silhouettes */}
-              <div className="absolute left-[-6px] top-8 w-4 h-[72px] bg-zinc-900 border-r border-white/5 rounded-r-xl"></div>
-              <div className="absolute right-[-6px] top-8 w-4 h-[72px] bg-zinc-900 border-l border-white/5 rounded-l-xl"></div>
-
-              {/* Athletic pinstripes down the back */}
-              <div className="absolute inset-y-0 left-2 w-[1px] bg-white/5"></div>
-              <div className="absolute inset-y-0 right-2 w-[1px] bg-white/5"></div>
-
-              {/* Dynamic printed Name render */}
-              <div className="text-[11px] font-black tracking-widest text-white select-none uppercase font-sans mt-3 truncate max-w-full px-4 text-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-                {customName.trim() || "YOUR NAME"}
-              </div>
-
-              {/* Dynamic printed Number render */}
-              <div className={`text-6xl font-sans font-black tracking-tighter ${activeJersey ? activeJersey.accentColor : 'text-amber-450'} select-none mt-4 leading-none drop-shadow-[0_3px_6px_rgba(0,0,0,0.95)]`}>
-                {customNumber.trim() || "10"}
-              </div>
-
-              {/* Holographic sports seal at the bottom */}
-              <div className="absolute bottom-3.5 flex flex-col items-center gap-1 font-mono pointer-events-none">
-                <div className="text-[7.5px] text-zinc-500 tracking-wider font-extrabold uppercase text-center">
-                  ✨ {activeJersey?.country || 'ATHLETIC'} CHAMPIONSHIP
-                </div>
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Customer shipping details */}
       <div className="space-y-4">
@@ -478,15 +478,15 @@ export default function OrderForm({
         </div>
 
         <div>
-          <label className="block text-[9px] font-mono text-zinc-400 uppercase tracking-widest mb-1.5">
-            8. Delivery Shipping Address Address
+          <label className="block text-[9px] font-mono text-zinc-400 uppercase tracking-widest mb-1.5 font-bold">
+            8. Delivery Shipping Address
           </label>
           <textarea
             id="order-shipping-address"
             rows={2}
             value={shippingAddress}
             onChange={(e) => setShippingAddress(e.target.value)}
-            className="w-full bg-black text-zinc-250 text-xs px-3 py-2.5 border border-white/15 rounded-sm focus:outline-none focus:border-emerald-500 resize-none"
+            className="w-full bg-black text-zinc-200 text-xs px-3 py-2.5 border border-white/10 rounded-xl focus:outline-none focus:border-emerald-500 resize-none transition-all"
             placeholder="House, Street, Area, District (e.g., Block A, Mirpur, Dhaka)"
             required
           />
@@ -494,12 +494,12 @@ export default function OrderForm({
       </div>
 
       {/* Pricing feedback and submit button */}
-      <div className="mt-8 pt-4 border-t border-white/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 font-sans">
+      <div className="mt-8 pt-6 border-t border-white/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 font-sans">
         <div>
-          <span className="text-[9px] text-zinc-500 font-mono uppercase tracking-widest block">Total computed bill</span>
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-xl font-bold font-mono text-white">BDT {totalPriceBDT}</span>
-            <span className="text-[10px] font-mono text-zinc-500">/ ~${totalPriceUSD}</span>
+          <span className="text-[9px] text-zinc-550 font-mono uppercase tracking-widest block font-extrabold">Total dynamic bill</span>
+          <div className="flex items-baseline gap-1.5 mt-0.5">
+            <span className="text-2xl font-mono font-black text-white">BDT {totalPriceBDT}</span>
+            <span className="text-[10px] font-mono text-zinc-500 font-bold">/ ~${totalPriceUSD}</span>
           </div>
         </div>
 
@@ -507,14 +507,17 @@ export default function OrderForm({
           id="order-submit-btn"
           type="submit"
           disabled={isSubmitting}
-          className="flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold uppercase tracking-wider px-6 py-3.5 rounded-sm active:scale-95 transition-all shadow-lg disabled:opacity-50"
+          className="flex items-center justify-center gap-2.5 bg-gradient-to-r from-emerald-600 to-teal-650 hover:from-emerald-500 hover:to-teal-550 text-white text-[11px] font-black uppercase tracking-wider px-7 py-4 rounded-xl active:scale-95 transition-all duration-300 shadow-xl shadow-emerald-950/40 hover:shadow-emerald-500/10 hover:scale-[1.02] disabled:opacity-50 cursor-pointer"
         >
           {isSubmitting ? (
-            <span>Logging code...</span>
+            <span className="flex items-center gap-2">
+              <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+              Logging transaction...
+            </span>
           ) : (
             <>
-              <ShoppingCart className="w-4.5 h-4.5" />
-              <span>Submit & Log Transaction</span>
+              <ShoppingCart className="w-4 h-4 shrink-0" />
+              <span>Submit & Register Order</span>
             </>
           )}
         </button>
