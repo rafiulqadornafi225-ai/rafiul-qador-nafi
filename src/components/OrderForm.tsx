@@ -165,9 +165,11 @@ export default function OrderForm({
         <div className="w-16 h-16 bg-emerald-500/10 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto mb-4">
           <FileCheck className="w-8 h-8 text-emerald-400" />
         </div>
-        <h3 className="text-xl md:text-2xl font-bold uppercase tracking-wide text-white font-sans">Payment Submission Logged!</h3>
-        <p className="text-xs text-zinc-400 mt-2 max-w-sm mx-auto leading-relaxed">
-          Your Transaction Validation ID <span className="font-mono font-bold text-emerald-400">{generatedOrder.transactionId}</span> has been logged into our local registry successfully.
+        <h3 className="text-xl md:text-2xl font-bold uppercase tracking-wide text-white font-sans">Order Recorded Successfully!</h3>
+        <p className="text-xs text-zinc-300 mt-2 max-w-md mx-auto leading-relaxed">
+          আপনার অর্ডার আইডি: <span className="font-mono font-bold text-emerald-400">{generatedOrder.id}</span> | bKash TrxID: <span className="font-mono font-bold text-amber-400">{generatedOrder.transactionId}</span>
+          <br />
+          <span className="text-zinc-400 text-[11px] block mt-1">নিচের বাটনে ক্লিক করে ফেসবুক পেজে বা হোয়াটসঅ্যাপে মেসেজ দিয়ে দিন।</span>
         </p>
 
         {/* Invoice Summary Box */}
@@ -364,7 +366,7 @@ export default function OrderForm({
               মোবাইল ওয়ালেট পেমেন্ট নির্দেশিকা (Mobile Payment instructions)
             </p>
             <p className="leading-relaxed text-zinc-300">
-              অর্ডারটি সম্পূর্ণ করতে অনুগ্রহ করে মোট <span className="text-emerald-400 font-extrabold">BDT {totalPriceBDT}</span> (~${totalPriceUSD}) আমাদের নিচের যেকোনো একটি সচল নাম্বারে Send Money বা Cash Out করুন:
+              অর্ডারটি সম্পূর্ণ করতে অনুগ্রহ করে মোট <span className="text-emerald-400 font-extrabold">BDT {totalPriceBDT}</span> (~${totalPriceUSD}) আমাদের নিচের যেকোনো একটি সচল নাম্বারে Send Money করুন:
             </p>
             
             <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono">
@@ -463,17 +465,20 @@ export default function OrderForm({
 
           <div>
             <label className="block text-[9px] font-mono text-emerald-400 uppercase tracking-widest font-extrabold mb-1.5 flex items-center gap-1">
-              7. Transaction Code (TRX ID) *
+              7. bKash / Nagad Transaction ID (TrxID) *
             </label>
             <input
               id="order-transaction-id"
               type="text"
               value={transactionId}
               onChange={(e) => setTransactionId(e.target.value)}
-              className="w-full bg-black text-amber-400 font-mono text-xs font-bold px-3 py-2.5 border border-emerald-500/40 focus:outline-none focus:border-emerald-500 rounded-sm uppercase tracking-wide placeholder-zinc-700"
-              placeholder="e.g. AX98L75T09"
+              className="w-full bg-black text-amber-400 font-mono text-xs font-bold px-3 py-2.5 border border-emerald-500/40 focus:outline-none focus:border-emerald-500 rounded-sm uppercase tracking-wide placeholder-zinc-600"
+              placeholder="e.g. 9B7A2X18Y (or COD for Cash on Delivery)"
               required
             />
+            <p className="text-[10px] text-zinc-400 mt-1">
+              বিকাশ/নগদে {bKashNumber} নম্বরে টাকা পাঠানোর পর প্রাপ্ত TrxID লিখুন। ক্যাশ অন ডেলিভারি হলে "COD" লিখুন।
+            </p>
           </div>
         </div>
 
@@ -490,6 +495,44 @@ export default function OrderForm({
             placeholder="House, Street, Area, District (e.g., Block A, Mirpur, Dhaka)"
             required
           />
+        </div>
+
+        {/* Custom Jersey Name & Back Number Printing (Optional) */}
+        <div className="p-3.5 bg-black/50 border border-emerald-500/20 rounded-xl space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-mono font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>👕</span> Custom Back Name & Jersey Number (Optional)
+            </span>
+            <span className="text-[9px] text-zinc-500 font-mono">Free Custom Print</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[8px] font-mono text-zinc-400 uppercase mb-1">
+                Custom Name on Back
+              </label>
+              <input
+                id="order-custom-name"
+                type="text"
+                value={customName}
+                onChange={(e) => setCustomName(e.target.value)}
+                className="w-full bg-[#111] text-white font-mono text-xs px-2.5 py-1.5 border border-white/10 rounded-sm focus:outline-none focus:border-emerald-500 uppercase"
+                placeholder="e.g. MESSI or NAFI"
+              />
+            </div>
+            <div>
+              <label className="block text-[8px] font-mono text-zinc-400 uppercase mb-1">
+                Custom Jersey Number
+              </label>
+              <input
+                id="order-custom-number"
+                type="text"
+                value={customNumber}
+                onChange={(e) => setCustomNumber(e.target.value)}
+                className="w-full bg-[#111] text-amber-300 font-mono text-xs font-bold px-2.5 py-1.5 border border-white/10 rounded-sm focus:outline-none focus:border-emerald-500"
+                placeholder="e.g. 10 or 7"
+              />
+            </div>
+          </div>
         </div>
       </div>
 

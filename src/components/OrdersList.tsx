@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { History, Check, Clock, ShieldCheck, Send, Trash2 } from 'lucide-react';
+import { History, Check, Clock, ShieldCheck, Send, Trash2, Copy } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Order } from '../types';
 
@@ -10,6 +10,7 @@ interface OrdersListProps {
 
 export default function OrdersList({ orders, onOrderUpdate }: OrdersListProps) {
   const [verifyingOrderId, setVerifyingOrderId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleDelete = (orderId: string) => {
     const updated = orders.filter((o) => o.id !== orderId);
@@ -70,9 +71,21 @@ export default function OrdersList({ orders, onOrderUpdate }: OrdersListProps) {
                 {/* Order Details */}
                 <div className="flex-1 font-sans">
                   <div className="flex flex-wrap items-center gap-2 mb-3">
-                    <span className="font-mono text-[10px] font-bold text-white bg-black px-2 py-0.5 rounded-sm border border-white/10 uppercase tracking-wider">
-                      {order.id}
+                    <span className="font-mono text-xs font-black text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-1.5">
+                      ORDER #: {order.id}
                     </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(order.id);
+                        setCopiedId(order.id);
+                        setTimeout(() => setCopiedId(null), 2000);
+                      }}
+                      className="text-[10px] text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded flex items-center gap-1 border border-white/10 font-mono transition-all cursor-pointer"
+                      title="Copy Order Number"
+                    >
+                      <Copy className="w-3 h-3 text-amber-400" />
+                      <span>{copiedId === order.id ? 'Copied!' : 'Copy'}</span>
+                    </button>
                     <span className="text-[10px] font-mono text-zinc-500">
                       {order.timestamp}
                     </span>

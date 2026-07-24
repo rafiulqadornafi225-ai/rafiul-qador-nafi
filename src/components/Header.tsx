@@ -91,48 +91,65 @@ export default function Header({
 
   return (
     <header className="sticky top-0 z-40 w-full bg-[#0a0a0a]/95 backdrop-blur-md border-b border-white/10">
-      {/* Top Multi-wallet Payment Marquee */}
-      <div className="w-full bg-gradient-to-r from-red-650 via-[#312e81] to-[#006a4e] text-white py-2 px-4 shadow-inner relative overflow-hidden">
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between text-xs font-semibold gap-3">
-          <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 text-center lg:text-left">
-            <span className="bg-white text-indigo-950 font-mono font-extrabold text-[9px] px-2 py-0.5 rounded-sm uppercase tracking-wider animate-pulse">
-              Cash Direct (bKash/Nagad)
+      {/* Top Multi-wallet Payment Banner */}
+      <div className="w-full bg-[#0d0f0e] text-white py-2 px-4 border-b border-white/10 shadow-md relative overflow-hidden">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between text-xs font-medium gap-2.5">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+            <span className="inline-flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono font-extrabold text-[10px] px-2.5 py-0.5 rounded uppercase tracking-wider">
+              <Check className="w-3 h-3 text-emerald-400" />
+              VERIFIED PAYMENT WALLETS
             </span>
-            <span className="font-sans font-medium text-zinc-100 text-[11px]">
-              Our active mobile payment number is fully compatible with both bKash and Nagad. You can complete your transaction directly using either of these platforms.
+            <span className="text-zinc-300 text-xs">
+              Official bKash & Nagad Personal Send Money / Cash on Delivery
             </span>
           </div>
           
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            {/* bKash Number */}
-            <div className="flex items-center gap-1.5 bg-black/40 px-2 py-1 rounded-sm border border-white/10">
-              <span className="text-[10px] font-bold text-pink-400 font-sans">bKash:</span>
-              <span className="font-mono text-xs tracking-wider text-white">
-                {bKashNumber}
-              </span>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {/* bKash Payment Pill */}
+            <div className="flex items-center gap-2 bg-pink-950/50 border border-pink-500/40 px-3 py-1 rounded-md text-xs transition-all hover:border-pink-400">
+              <span className="font-extrabold text-[10px] text-pink-400 uppercase tracking-wide bg-pink-500/20 px-1.5 py-0.5 rounded">bKash</span>
+              <span className="font-mono font-bold text-white tracking-wider">{bKashNumber}</span>
               <button
                 id="header-copy-bKash"
                 onClick={handleCopyB}
-                className="p-0.5 hover:bg-white/10 rounded ml-1 transition-all"
-                title="Copy Active bKash Number"
+                className="flex items-center gap-1 bg-pink-600 hover:bg-pink-500 text-white font-bold text-[10px] px-2 py-0.5 rounded transition-all active:scale-95 cursor-pointer ml-1"
+                title="Copy bKash Number"
               >
-                {copiedB ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-300" />}
+                {copiedB ? (
+                  <>
+                    <Check className="w-3 h-3 text-white" />
+                    <span>COPIED!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3 text-white" />
+                    <span>COPY</span>
+                  </>
+                )}
               </button>
             </div>
 
-            {/* Nagad Number */}
-            <div className="flex items-center gap-1.5 bg-black/40 px-2 py-1 rounded-sm border border-white/10">
-              <span className="text-[10px] font-bold text-orange-400 font-sans">Nagad:</span>
-              <span className="font-mono text-xs tracking-wider text-white">
-                {nagadNumber}
-              </span>
+            {/* Nagad Payment Pill */}
+            <div className="flex items-center gap-2 bg-orange-950/50 border border-orange-500/40 px-3 py-1 rounded-md text-xs transition-all hover:border-orange-400">
+              <span className="font-extrabold text-[10px] text-orange-400 uppercase tracking-wide bg-orange-500/20 px-1.5 py-0.5 rounded">Nagad</span>
+              <span className="font-mono font-bold text-white tracking-wider">{nagadNumber}</span>
               <button
                 id="header-copy-nagad"
                 onClick={handleCopyN}
-                className="p-0.5 hover:bg-white/10 rounded ml-1 transition-all"
-                title="Copy Active Nagad Number"
+                className="flex items-center gap-1 bg-orange-600 hover:bg-orange-500 text-white font-bold text-[10px] px-2 py-0.5 rounded transition-all active:scale-95 cursor-pointer ml-1"
+                title="Copy Nagad Number"
               >
-                {copiedN ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-zinc-300" />}
+                {copiedN ? (
+                  <>
+                    <Check className="w-3 h-3 text-white" />
+                    <span>COPIED!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3 h-3 text-white" />
+                    <span>COPY</span>
+                  </>
+                )}
               </button>
             </div>
 
@@ -141,7 +158,7 @@ export default function Header({
               <button
                 id="header-edit-bKash"
                 onClick={() => setShowEdit(!showEdit)}
-                className="p-1 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/50 rounded active:scale-95 transition-all text-white"
+                className="p-1.5 bg-zinc-800 hover:bg-zinc-700 border border-white/20 rounded active:scale-95 transition-all text-white ml-1"
                 title="Configure Numbers (Admin Only)"
               >
                 <Settings2 className="w-3.5 h-3.5" />

@@ -36,7 +36,7 @@ export default function JerseyCard({ jersey, onBuyNow, isAdmin, onEdit, onDelete
           </span>
           <p className="text-[10px] text-zinc-400 font-mono mt-2.5 uppercase tracking-widest font-semibold flex items-center gap-1">
             <span className="w-1 h-1 rounded-full bg-emerald-400 inline-block animate-ping"></span>
-            2026 Pitch Authentic
+            Pitch Authentic Master
           </p>
         </div>
         

@@ -10,7 +10,14 @@ import {
   MapPin, 
   Sparkles,
   Info,
-  Star
+  Star,
+  Shirt,
+  PhoneCall,
+  Mic,
+  ShieldCheck,
+  CheckCircle2,
+  ChevronRight,
+  Flame
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Header from './components/Header';
@@ -22,6 +29,8 @@ import { JERSEYS } from './data';
 import { Jersey, Order, VisitorLog } from './types';
 import VisitorTracker from './components/VisitorTracker';
 import AutomationHub from './components/AutomationHub';
+import BackupPanel from './components/BackupPanel';
+import VoiceAgent from './components/VoiceAgent';
 
 export default function App() {
   const [bKashNumber, setBKashNumber] = useState('01402580064');
@@ -32,7 +41,21 @@ export default function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [personalOrders, setPersonalOrders] = useState<Order[]>([]);
   const [jerseysList, setJerseysList] = useState<Jersey[]>(JERSEYS);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [hasFetchedState, setHasFetchedState] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('nafi_jersey_is_admin') === 'true';
+    }
+    return false;
+  });
+
+  // Persist Admin session status in localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('nafi_jersey_is_admin', isAdmin ? 'true' : 'false');
+    }
+  }, [isAdmin]);
 
   // Load personal order history from localStorage on mounting
   useEffect(() => {
@@ -71,7 +94,7 @@ export default function App() {
   // Admin Form state
   const [formCountry, setFormCountry] = useState('');
   const [formName, setFormName] = useState('');
-  const [formPriceBDT, setFormPriceBDT] = useState<number>(1400);
+  const [formPriceBDT, setFormPriceBDT] = useState<number>(1350);
   const [formDescription, setFormDescription] = useState('');
   const [formImage, setFormImage] = useState('');
   const [formBadgeColor, setFormBadgeColor] = useState('bg-indigo-600 text-white');
@@ -119,6 +142,86 @@ export default function App() {
         setJerseysList(data.jerseys || []);
         setOrders(data.orders || []);
         setViewsCount(data.viewsCount || 0);
+        setHasFetchedState(true);
+
+        // Self-Healing Syncer:
+        // Check if server is at default state while we have cached administrative updates in localStorage
+        if (typeof window !== 'undefined') {
+          const cachedConfigStr = localStorage.getItem('nafi_jersey_store_custom_config');
+          if (cachedConfigStr) {
+            const cached = JSON.parse(cachedConfigStr);
+            const serverJerseys = data.jerseys || [];
+            
+            const serverIsDefault = serverJerseys.length === 8 && serverJerseys.every((j: Jersey) => 
+               JERSEYS.some(dj => dj.id === j.id)
+            ) && data.bKashNumber === '01402580064' && data.nagadNumber === '01402580064';
+
+            const localHasCustomizations = cached.jerseys && (
+              cached.jerseys.length !== 8 || 
+              cached.bKashNumber !== '01402580064' || 
+              cached.nagadNumber !== '01402580064' || 
+              !cached.jerseys.every((j: Jersey) => JERSEYS.some(dj => dj.id === j.id))
+            );
+
+            if (serverIsDefault && localHasCustomizations && isAdmin) {
+              console.log("Self-healing triggered: Restoring store catalog and payment parameters...");
+              setIsSyncing(true);
+              const restorePayload = {
+                jerseys: cached.jerseys,
+                bKashNumber: cached.bKashNumber,
+                nagadNumber: cached.nagadNumber,
+                whatsappNumber: cached.whatsappNumber,
+                bKashQR: cached.bKashQR,
+                nagadQR: cached.nagadQR,
+                webhookUrl: cached.webhookUrl
+              };
+              
+              await fetch('/api/config/sync', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-admin-passcode': 'admin2026'
+                },
+                body: JSON.stringify(restorePayload)
+              });
+              
+              setJerseysList(cached.jerseys);
+              setBKashNumber(cached.bKashNumber);
+              setNagadNumber(cached.nagadNumber);
+              setWhatsappNumber(cached.whatsappNumber || '01402580064');
+              setBKashQR(cached.bKashQR);
+              setNagadQR(cached.nagadQR);
+              setWebhookUrl(cached.webhookUrl);
+              setIsSyncing(false);
+            } else {
+              // Store has live updates, save or freshen cache with the current state representing custom catalog
+              localStorage.setItem('nafi_jersey_store_custom_config', JSON.stringify({
+                version: 'nafi_jersey_v1',
+                timestamp: Date.now(),
+                bKashNumber: data.bKashNumber,
+                nagadNumber: data.nagadNumber,
+                whatsappNumber: data.whatsappNumber || '01402580064',
+                bKashQR: data.bKashQR,
+                nagadQR: data.nagadQR,
+                webhookUrl: data.webhookUrl,
+                jerseys: data.jerseys || []
+              }));
+            }
+          } else {
+            // Seed local storage with fetched data
+            localStorage.setItem('nafi_jersey_store_custom_config', JSON.stringify({
+              version: 'nafi_jersey_v1',
+              timestamp: Date.now(),
+              bKashNumber: data.bKashNumber,
+              nagadNumber: data.nagadNumber,
+              whatsappNumber: data.whatsappNumber || '01402580064',
+              bKashQR: data.bKashQR,
+              nagadQR: data.nagadQR,
+              webhookUrl: data.webhookUrl,
+              jerseys: data.jerseys || []
+            }));
+          }
+        }
         
         let realSessionId = sessionStorage.getItem('current_log_id');
         if (!realSessionId) {
@@ -212,6 +315,118 @@ export default function App() {
         }).catch(err => console.error("Sync log fail", err));
       }
     }
+  };
+
+  // Synchronize any admin-level local modifications immediately to the localStorage custom config cache
+  useEffect(() => {
+    if (isAdmin && hasFetchedState && typeof window !== 'undefined') {
+      const stateObject = {
+        version: 'nafi_jersey_v1',
+        timestamp: Date.now(),
+        bKashNumber,
+        nagadNumber,
+        whatsappNumber,
+        bKashQR,
+        nagadQR,
+        webhookUrl,
+        jerseys: jerseysList,
+      };
+      localStorage.setItem('nafi_jersey_store_custom_config', JSON.stringify(stateObject));
+    }
+  }, [isAdmin, hasFetchedState, bKashNumber, nagadNumber, whatsappNumber, bKashQR, nagadQR, webhookUrl, jerseysList]);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/config/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-passcode': 'admin2026'
+        },
+        body: JSON.stringify({
+          jerseys: jerseysList,
+          bKashNumber,
+          nagadNumber,
+          whatsappNumber,
+          bKashQR,
+          nagadQR,
+          webhookUrl
+        })
+      });
+      if (res.ok) {
+        console.log("Manual synchronization complete successfully.");
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('nafi_jersey_store_custom_config', JSON.stringify({
+            version: 'nafi_jersey_v1',
+            timestamp: Date.now(),
+            bKashNumber,
+            nagadNumber,
+            whatsappNumber,
+            bKashQR,
+            nagadQR,
+            webhookUrl,
+            jerseys: jerseysList
+          }));
+        }
+      }
+    } catch (err) {
+      console.error("Manual synchronization failed", err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleRestoreState = async (importedConfig: any) => {
+    setIsSyncing(true);
+    try {
+      const res = await fetch('/api/config/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-passcode': 'admin2026'
+        },
+        body: JSON.stringify({
+          jerseys: importedConfig.jerseys,
+          bKashNumber: importedConfig.bKashNumber,
+          nagadNumber: importedConfig.nagadNumber,
+          whatsappNumber: importedConfig.whatsappNumber,
+          bKashQR: importedConfig.bKashQR,
+          nagadQR: importedConfig.nagadQR,
+          webhookUrl: importedConfig.webhookUrl
+        })
+      });
+      
+      if (res.ok) {
+        if (importedConfig.bKashNumber !== undefined) setBKashNumber(importedConfig.bKashNumber);
+        if (importedConfig.nagadNumber !== undefined) setNagadNumber(importedConfig.nagadNumber);
+        if (importedConfig.whatsappNumber !== undefined) setWhatsappNumber(importedConfig.whatsappNumber || '01402580064');
+        if (importedConfig.bKashQR !== undefined) setBKashQR(importedConfig.bKashQR);
+        if (importedConfig.nagadQR !== undefined) setNagadQR(importedConfig.nagadQR);
+        if (importedConfig.webhookUrl !== undefined) setWebhookUrl(importedConfig.webhookUrl);
+        if (importedConfig.jerseys !== undefined) setJerseysList(importedConfig.jerseys);
+        
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('nafi_jersey_store_custom_config', JSON.stringify({
+            version: 'nafi_jersey_v1',
+            timestamp: Date.now(),
+            bKashNumber: importedConfig.bKashNumber,
+            nagadNumber: importedConfig.nagadNumber,
+            whatsappNumber: importedConfig.whatsappNumber || '01402580064',
+            bKashQR: importedConfig.bKashQR,
+            nagadQR: importedConfig.nagadQR,
+            webhookUrl: importedConfig.webhookUrl,
+            jerseys: importedConfig.jerseys
+          }));
+        }
+        return true;
+      }
+    } catch (err) {
+      console.error("Restoration failed", err);
+    } finally {
+      setIsSyncing(false);
+    }
+    return false;
   };
 
   // Track searching and filter parameters in the visitor log
@@ -433,7 +648,7 @@ export default function App() {
     const testCities = ['Mirpur, Dhaka', 'Banani, Dhaka', 'Chittagong', 'Sylhet', 'Rajshahi', 'Khulna', 'Jashore', 'Uttara, Dhaka'];
     const testDevices = ['Android Mobile', 'iPhone Mobile', 'Windows PC', 'Mac PC'];
     const testActions = [
-      'Browsing 2026 Selection Gallery',
+      'Browsing Premier Selection Gallery',
       'Checked active Payment Rules card',
       'Copied active bKash wallet number',
       'Began checkout validation for Argentina Three-Star Jersey',
@@ -581,7 +796,7 @@ export default function App() {
     // reset form
     setFormCountry('');
     setFormName('');
-    setFormPriceBDT(1400);
+    setFormPriceBDT(1350);
     setFormDescription('');
     setFormImage('');
     setShowAddModal(false);
@@ -635,7 +850,7 @@ export default function App() {
     setEditingJersey(null);
     setFormCountry('');
     setFormName('');
-    setFormPriceBDT(1400);
+    setFormPriceBDT(1350);
     setFormDescription('');
     setFormImage('');
   };
@@ -676,11 +891,11 @@ export default function App() {
       <main className="flex-1 pb-24">
         
         {/* Dynamic Hero Spotlight Area */}
-        <section className="relative overflow-hidden pt-16 pb-24 border-b border-white/10 bg-gradient-to-b from-indigo-950/15 via-[#0e1712]/5 to-transparent font-sans">
-          {/* Futuristic ambient lighting and grid line elements */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.06)_0%,transparent_65%)] pointer-events-none"></div>
-          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-emerald-500/5 rounded-full blur-3xl pointer-events-none"></div>
-          <div className="absolute top-1/3 left-1/4 w-[350px] h-[350px] bg-indigo-500/5 rounded-full blur-3xl pointer-events-none"></div>
+        <section className="relative overflow-hidden pt-16 pb-20 border-b border-white/10 bg-gradient-to-b from-emerald-950/20 via-[#0a0f0d]/60 to-[#0a0a0a] font-sans">
+          {/* Ambient lighting & mesh gradients */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.12)_0%,transparent_70%)] pointer-events-none"></div>
+          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[650px] bg-emerald-500/8 rounded-full blur-3xl pointer-events-none"></div>
+          <div className="absolute top-1/3 left-1/4 w-[400px] h-[400px] bg-indigo-500/8 rounded-full blur-3xl pointer-events-none"></div>
           
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
             {isAdmin && (
@@ -704,69 +919,171 @@ export default function App() {
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="inline-flex items-center gap-2 bg-zinc-900/90 border border-white/10 px-4 py-2 rounded-full text-xs font-bold text-zinc-300 backdrop-blur shadow-xl hover:border-emerald-500/30 transition-all"
+              className="inline-flex items-center gap-2.5 bg-zinc-900/90 border border-emerald-500/30 px-5 py-2.5 rounded-full text-xs font-bold text-zinc-200 backdrop-blur shadow-2xl hover:border-emerald-400 transition-all"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="text-[10px] font-display font-extrabold uppercase tracking-widest text-emerald-400">NAFI JERSEY HOUSE</span>
-              <span className="text-zinc-650">|</span>
-              <span className="text-[11px] text-zinc-300">Premium World National Jerseys Active</span>
+              <span className="text-[11px] font-display font-extrabold uppercase tracking-widest text-emerald-400">NAFI JERSEY HOUSE</span>
+              <span className="text-zinc-650">•</span>
+              <span className="text-[11px] text-emerald-300 font-mono font-bold">Official Player Edition • BDT 1,350</span>
             </motion.div>
 
             <motion.h2
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="text-4xl sm:text-6xl lg:text-8xl font-display font-extrabold tracking-tighter text-white mt-8 max-w-5xl mx-auto leading-none uppercase"
+              className="text-4xl sm:text-6xl lg:text-7xl font-display font-extrabold tracking-tight text-white mt-8 max-w-5xl mx-auto leading-[1.08] uppercase"
             >
-              Wear the Pride Of Your <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-emerald-400 drop-shadow-sm">Nation In 2026</span> Style
+              WEAR THE PASSION.<br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-teal-200 to-white drop-shadow-md">
+                REPRESENT YOUR NATION.
+              </span>
             </motion.h2>
 
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-xs sm:text-sm text-zinc-400 mt-6 max-w-3xl mx-auto leading-relaxed"
+              className="text-sm sm:text-base text-zinc-300 mt-6 max-w-3xl mx-auto leading-relaxed font-normal"
             >
-              Discover elite premium-weave football national selection jerseys engineered for maximum comfort, breathability, and durability. Secure your order using our automated transparent bKash/Nagad verification system and get instant home dispatch anywhere in Bangladesh.
+              Bangladesh's official home for high-performance national team football kits. Engineered with breathable player-version fabrics, <strong>100% free name & number customization</strong>, and fast 1–3 day nationwide home delivery.
             </motion.p>
 
-            {/* Quick trust metrics */}
+            {/* Hero CTAs */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.25 }}
+              className="flex flex-wrap items-center justify-center gap-4 mt-9"
+            >
+              <button
+                onClick={() => scrollToSection('shop')}
+                className="flex items-center gap-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black font-extrabold text-xs uppercase tracking-wider px-7 py-4 rounded-xl shadow-xl shadow-emerald-950/50 hover:scale-105 active:scale-95 transition-all cursor-pointer"
+              >
+                <Shirt className="w-4 h-4" />
+                <span>Explore Official Jerseys</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => {
+                  const elem = document.getElementById('voice-agent-trigger') || document.getElementById('shop');
+                  elem?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="flex items-center gap-2.5 bg-zinc-900/90 hover:bg-zinc-800 border border-white/15 hover:border-emerald-500/40 text-white font-extrabold text-xs uppercase tracking-wider px-6 py-4 rounded-xl shadow-lg hover:scale-105 active:scale-95 transition-all cursor-pointer backdrop-blur"
+              >
+                <Mic className="w-4 h-4 text-emerald-400 animate-pulse" />
+                <span>Order via AI Voice Assistant</span>
+              </button>
+
+              <a
+                href="https://www.facebook.com/share/1Bh4gYajWE/"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-300 text-xs font-extrabold uppercase tracking-wider px-5 py-4 rounded-xl transition-all"
+              >
+                <span>Facebook Page</span>
+              </a>
+            </motion.div>
+
+            {/* Key Business Pillars Grid */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.3 }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-6xl mx-auto mt-14"
+            >
+              <div className="bg-[#121413]/90 border border-white/10 hover:border-emerald-500/30 p-5 rounded-xl text-left transition-all backdrop-blur shadow-xl group">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3.5 group-hover:scale-110 transition-transform">
+                  <Shirt className="w-5 h-5" />
+                </div>
+                <h4 className="text-white font-bold text-sm uppercase tracking-wide">Player Edition Fabric</h4>
+                <p className="text-zinc-400 text-xs mt-1 leading-relaxed">
+                  Authentic moisture-wicking double-knit mesh fabric for ultimate pitch-ready breathability.
+                </p>
+              </div>
+
+              <div className="bg-[#121413]/90 border border-white/10 hover:border-emerald-500/30 p-5 rounded-xl text-left transition-all backdrop-blur shadow-xl group">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3.5 group-hover:scale-110 transition-transform">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <h4 className="text-white font-bold text-sm uppercase tracking-wide">100% Free Printing</h4>
+                <p className="text-zinc-400 text-xs mt-1 leading-relaxed">
+                  Custom name & number heat-pressed on your jersey at no extra cost upon request.
+                </p>
+              </div>
+
+              <div className="bg-[#121413]/90 border border-white/10 hover:border-emerald-500/30 p-5 rounded-xl text-left transition-all backdrop-blur shadow-xl group">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3.5 group-hover:scale-110 transition-transform">
+                  <Truck className="w-5 h-5" />
+                </div>
+                <h4 className="text-white font-bold text-sm uppercase tracking-wide">1–3 Day Delivery</h4>
+                <p className="text-zinc-400 text-xs mt-1 leading-relaxed">
+                  Flat BDT 80 shipping to all 64 districts. Cash on Delivery or bKash / Nagad options.
+                </p>
+              </div>
+
+              <div className="bg-[#121413]/90 border border-white/10 hover:border-emerald-500/30 p-5 rounded-xl text-left transition-all backdrop-blur shadow-xl group">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3.5 group-hover:scale-110 transition-transform">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <h4 className="text-white font-bold text-sm uppercase tracking-wide">Verified Merchant</h4>
+                <p className="text-zinc-400 text-xs mt-1 leading-relaxed">
+                  Direct bKash / Nagad payment verification with instant order tracking & Facebook page support.
+                </p>
+              </div>
+            </motion.div>
+
+            {/* Brand Guarantee Banner */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.3 }}
-              className="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-4xl mx-auto mt-14 bg-[#111111]/80 backdrop-blur border border-white/10 p-5 rounded-xl shadow-2xl relative overflow-hidden"
+              transition={{ duration: 0.8, delay: 0.4 }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-5xl mx-auto mt-8 bg-[#0f1110]/90 backdrop-blur border border-white/10 p-5 rounded-xl shadow-2xl relative overflow-hidden text-left"
             >
               <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/5 to-indigo-500/5 pointer-events-none"></div>
-              <div className="p-4 text-center border-r border-white/10 last:border-0 relative z-10 hover:bg-white/2 transition-colors duration-200 rounded-lg">
-                <p className="text-2xl sm:text-3xl font-black font-mono text-white tracking-tight">{jerseysList.length}</p>
-                <p className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest mt-1.5 font-sans">Nations Jerseys</p>
+              
+              <div className="flex items-center gap-3.5 p-2 relative z-10">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div>
+                  <h5 className="text-xs font-bold text-white uppercase tracking-wider">100% Authentic Kits</h5>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">Player version materials & crests</p>
+                </div>
               </div>
-              <div className="p-4 text-center border-r border-white/10 last:border-0 relative z-10 hover:bg-white/2 transition-colors duration-200 rounded-lg">
-                <p className="text-2xl sm:text-3xl font-black font-mono text-emerald-400 tracking-tight">100%</p>
-                <p className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest mt-1.5 font-sans">Real & Original</p>
+
+              <div className="flex items-center gap-3.5 p-2 relative z-10 md:border-l md:border-r border-white/10">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h5 className="text-xs font-bold text-white uppercase tracking-wider">Fixed BDT 1,350 Rate</h5>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">No hidden charges or price markups</p>
+                </div>
               </div>
-              <div className="p-4 text-center border-r border-white/10 last:border-0 relative z-10 hover:bg-white/2 transition-colors duration-200 rounded-lg">
-                <p className="text-2xl sm:text-3xl font-black font-mono text-[#00e194] tracking-tight">24 Hr</p>
-                <p className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest mt-1.5 font-sans">Dispatch Hub</p>
-              </div>
-              <div className="p-4 text-center last:border-0 relative z-10 hover:bg-white/2 transition-colors duration-200 rounded-lg">
-                <p className="text-2xl sm:text-3xl font-black font-mono text-white tracking-tight">Tk 1,350+</p>
-                <p className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest mt-1.5 font-sans">Premium Quality</p>
+
+              <div className="flex items-center gap-3.5 p-2 relative z-10">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <div>
+                  <h5 className="text-xs font-bold text-white uppercase tracking-wider">Mirpur Dispatch Hub</h5>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">Express shipping across Bangladesh</p>
+                </div>
               </div>
             </motion.div>
           </div>
         </section>
 
          {/* Store Location & Outlet address quick banner */}
-        <section className="bg-[#111] border-b border-t border-white/5 py-3 font-sans">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-zinc-400">
-            <div className="flex items-center gap-1.5">
-              <MapPin className="w-4 h-4 text-emerald-400" />
-              <span>Store dispatch address: <strong className="text-white">Mirpur, Dhaka</strong> (Delivery anywhere in Bangladesh)</span>
+        <section className="bg-[#111] border-b border-t border-white/5 py-3.5 font-sans">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-zinc-300">
+            <div className="flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Dispatch Warehouse & Office: <strong className="text-white">Mirpur, Dhaka</strong> (Express Home Delivery Across BD)</span>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-[10px] uppercase font-mono tracking-wider font-extrabold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 border border-emerald-500/20">
+              <span className="text-[10px] uppercase font-mono tracking-wider font-extrabold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 border border-emerald-500/20 rounded">
                 ✓ ALL DELIVERIES INSURED
               </span>
             </div>
@@ -781,7 +1098,7 @@ export default function App() {
                 Premium National Selection
               </span>
               <h3 className="text-2xl sm:text-4xl font-display font-extrabold text-white mt-1.5 tracking-tighter uppercase">
-                Official 2026 Jerseys Gallery
+                Official National Jerseys Gallery
               </h3>
             </div>
             
@@ -887,7 +1204,7 @@ export default function App() {
               </div>
               <h4 className="text-white font-bold uppercase tracking-wider text-sm">No Jerseys Match Search</h4>
               <p className="text-zinc-400 text-xs mt-2 leading-relaxed">
-                We couldn't find any 2026 jersey matching "<span className="text-indigo-400 font-mono font-bold">{searchQuery}</span>" in the {selectedRegion === 'All' ? 'entire database' : `${selectedRegion} region`}.
+                We couldn't find any jersey matching "<span className="text-indigo-400 font-mono font-bold">{searchQuery}</span>" in the {selectedRegion === 'All' ? 'entire database' : `${selectedRegion} region`}.
               </p>
               <button
                 onClick={() => {
@@ -928,12 +1245,18 @@ export default function App() {
             </section>
 
             <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12">
-              <AutomationHub
+              <BackupPanel
+                isAdmin={isAdmin}
+                jerseysList={jerseysList}
+                bKashNumber={bKashNumber}
+                nagadNumber={nagadNumber}
+                whatsappNumber={whatsappNumber}
+                bKashQR={bKashQR}
+                nagadQR={nagadQR}
                 webhookUrl={webhookUrl}
-                webhookLogs={webhookLogs}
-                onUpdateWebhookUrl={handleUpdateWebhookUrl}
-                onClearWebhookLogs={handleClearWebhookLogs}
-                onTestDispatch={handleTestDispatch}
+                isSyncing={isSyncing}
+                onRestoreState={handleRestoreState}
+                onManualSync={handleManualSync}
               />
             </section>
           </>
@@ -1002,7 +1325,7 @@ export default function App() {
                 <div>
                   <h4 className="font-bold text-white uppercase tracking-wide text-sm">Instant Confirmation Support</h4>
                   <p className="text-xs text-zinc-450 mt-2 max-w-sm mx-auto leading-relaxed">
-                    Message us at our official Facebook channel inbox with your registered payment validation codes to finalize shipment immediately.
+                    Message us at our official Facebook page inbox with your registered payment validation codes to finalize shipment immediately.
                   </p>
                 </div>
                 <a
@@ -1118,7 +1441,7 @@ export default function App() {
                       value={formName}
                       onChange={(e) => setFormName(e.target.value)}
                       className="w-full bg-black text-white px-3 py-2.5 border border-white/10 rounded focus:outline-none focus:border-indigo-500 text-xs"
-                      placeholder="e.g. Bangladesh 2026 Gold Edition Home Jersey"
+                      placeholder="e.g. Bangladesh Gold Edition Home Jersey"
                       required
                     />
                   </div>
@@ -1481,23 +1804,25 @@ export default function App() {
               </h5>
               <span className="text-zinc-700">|</span>
               <p className="text-[9px] text-zinc-500 font-mono tracking-widest uppercase">
-                © 2026. ALL RIGHTS RESERVED.
+                © NAFI JERSEY HOUSE. ALL RIGHTS RESERVED.
               </p>
             </div>
             
-            {/* Public Live View Counter Badge */}
-            <div 
-              className="flex items-center gap-1.5 bg-black/60 border border-white/10 px-2.5 py-1 rounded-sm text-zinc-400 text-[10px] font-mono tracking-wide"
-              title="Public total website page hits"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00e194] animate-pulse"></span>
-              <span className="text-zinc-500">VIEWS:</span>
-              <span className="text-[#00e194] font-bold">{viewsCount}</span>
-            </div>
+            {/* Admin Live Traffic Counter Badge - Restricted to Admin Only */}
+            {isAdmin && (
+              <div 
+                className="flex items-center gap-1.5 bg-black/60 border border-white/10 px-2.5 py-1 rounded-sm text-zinc-400 text-[10px] font-mono tracking-wide"
+                title="Admin total website page hits"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00e194] animate-pulse"></span>
+                <span className="text-zinc-500">TRAFFIC:</span>
+                <span className="text-[#00e194] font-bold">{viewsCount}</span>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-4 text-[10px] text-zinc-400 font-mono uppercase tracking-widest">
-            <a href="https://www.facebook.com/share/1Bh4gYajWE/" target="_blank" rel="noreferrer" className="hover:text-white transition-colors text-emerald-400 font-bold">Facebook Channel</a>
+            <a href="https://www.facebook.com/share/1Bh4gYajWE/" target="_blank" rel="noreferrer" className="hover:text-white transition-colors text-emerald-400 font-bold">Facebook Page</a>
             <span>•</span>
             <span className="cursor-pointer hover:text-white" onClick={() => scrollToSection('rules')}>Payment Rules</span>
             <span>•</span>
@@ -1505,6 +1830,27 @@ export default function App() {
           </div>
         </div>
       </footer>
+
+      {/* Floating AI Voice Agent */}
+      <VoiceAgent
+        jerseysList={jerseysList}
+        bKashNumber={bKashNumber}
+        nagadNumber={nagadNumber}
+        selectedJersey={checkoutJersey}
+        onOrderConfirmed={(newVoiceOrder) => {
+          setOrders(prev => [newVoiceOrder, ...prev]);
+          setPersonalOrders(prev => [newVoiceOrder, ...prev]);
+          if (typeof window !== 'undefined') {
+            try {
+              const stored = localStorage.getItem('my_orders_history');
+              const list = stored ? JSON.parse(stored) : [];
+              localStorage.setItem('my_orders_history', JSON.stringify([newVoiceOrder, ...list]));
+            } catch (err) {
+              console.error('Error saving voice order history to storage:', err);
+            }
+          }
+        }}
+      />
     </div>
   );
 }

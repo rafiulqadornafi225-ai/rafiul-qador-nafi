@@ -1,6 +1,10 @@
 {
   "name": "NAFI JERSEY HOUSE",
-  "description": "Premium 2026 football national jerseys for Brazil, Argentina, France, Spain, Portugal, and Germany with integrated bKash and transaction submission workflow.",
-  "requestFramePermissions": [],
-  "majorCapabilities": []
+  "description": "Premium 2026 football national jerseys for Brazil, Argentina, France, Spain, Portugal, and Germany with integrated bKash and transaction submission workflow with AI Voice Assistant.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

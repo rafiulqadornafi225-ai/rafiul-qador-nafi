@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { History, Search, ShieldCheck, Key, RefreshCw, HelpCircle, AlertCircle, CheckCircle2, Clock, Trash2, Send, ChevronRight } from 'lucide-react';
+import { History, Search, ShieldCheck, Key, RefreshCw, HelpCircle, AlertCircle, CheckCircle2, Clock, Trash2, Send, ChevronRight, Copy, MessageSquare, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Order } from '../types';
 
@@ -27,6 +27,10 @@ export default function SecureOrdersPanel({
   const [lookupError, setLookupError] = useState('');
   const [lookingUp, setLookingUp] = useState(false);
 
+  // Admin search & copy state
+  const [adminFilter, setAdminFilter] = useState('');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
   // Auto-validation state for admin mode
   const [verifyingOrderId, setVerifyingOrderId] = useState<string | null>(null);
 
@@ -37,8 +41,8 @@ export default function SecureOrdersPanel({
 
   const handleLookupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!lookupId.trim() || !lookupPhone.trim()) {
-      setLookupError('Please enter both Order ID/Receipt code and phone number.');
+    if (!lookupId.trim() && !lookupPhone.trim()) {
+      setLookupError('Please enter an Order ID (e.g. NJH-123456) or phone number.');
       setLookupResult(null);
       return;
     }
@@ -91,6 +95,19 @@ export default function SecureOrdersPanel({
     if (clean.length < 7) return '***';
     return clean.slice(0, 4) + ' ••••• ' + clean.slice(-3);
   };
+
+  const filteredAdminOrders = orders.filter((o) => {
+    if (!adminFilter.trim()) return true;
+    const q = adminFilter.toLowerCase().trim();
+    return (
+      o.id.toLowerCase().includes(q) ||
+      o.transactionId.toLowerCase().includes(q) ||
+      o.customerName.toLowerCase().includes(q) ||
+      o.customerPhone.toLowerCase().includes(q) ||
+      o.jerseyName.toLowerCase().includes(q) ||
+      (o.paymentMethod && o.paymentMethod.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <div className="bg-[#111111] border border-white/10 rounded-xl overflow-hidden shadow-2xl font-sans">
@@ -365,8 +382,37 @@ export default function SecureOrdersPanel({
                   <p className="text-[11px] text-zinc-500 mt-1">Full database visibility is actively permitted in admin session.</p>
                 </div>
                 <span className="bg-indigo-500/10 font-mono text-[9px] text-indigo-400 font-extrabold border border-indigo-500/20 rounded-sm px-2 py-0.5 uppercase">
-                  RECORDS: {orders.length}
+                  RECORDS: {filteredAdminOrders.length} / {orders.length}
                 </span>
+              </div>
+
+              {/* Informational Help Banner */}
+              <div className="p-3 rounded-lg bg-indigo-950/40 border border-indigo-500/30 text-[11px] text-indigo-200 flex items-start gap-2">
+                <MessageSquare className="w-4 h-4 text-amber-300 shrink-0 mt-0.5 animate-pulse" />
+                <div>
+                  <strong className="text-amber-300 block font-bold uppercase tracking-wide">Facebook Orders & Voice Agent Matching</strong>
+                  <span>When customers place an order via Voice AI or Online Form, they receive an <strong>Order Number (e.g. NJH-123456)</strong>. Type that Order Number in the filter below to quickly find their order details!</span>
+                </div>
+              </div>
+
+              {/* Real-time Search Input Filter */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={adminFilter}
+                  onChange={(e) => setAdminFilter(e.target.value)}
+                  placeholder="Filter by Order # (e.g. NJH-123456), TrxID, Phone, Name..."
+                  className="w-full bg-black/70 border border-white/10 focus:border-indigo-500 text-white placeholder-zinc-500 text-xs pl-9 pr-8 py-2 rounded-lg focus:outline-none font-mono"
+                />
+                {adminFilter && (
+                  <button
+                    onClick={() => setAdminFilter('')}
+                    className="absolute right-2.5 top-2 text-zinc-500 hover:text-white text-xs font-mono font-bold"
+                  >
+                    ×
+                  </button>
+                )}
               </div>
 
               {orders.length === 0 ? (
@@ -377,85 +423,114 @@ export default function SecureOrdersPanel({
                     Wait for customers to place orders or submit custom token entries.
                   </p>
                 </div>
+              ) : filteredAdminOrders.length === 0 ? (
+                <div className="bg-black/35 border border-white/5 p-6 rounded-xl text-center font-mono">
+                  <Search className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+                  <p className="text-xs text-zinc-400">No order matches search query "<span className="text-amber-300">{adminFilter}</span>"</p>
+                  <button onClick={() => setAdminFilter('')} className="mt-2 text-[10px] text-indigo-400 underline">Clear Filter</button>
+                </div>
               ) : (
                 <div className="space-y-3.5 max-h-[480px] overflow-y-auto pr-1">
-                  {orders.map((order) => {
+                  {filteredAdminOrders.map((order) => {
                     const isVerifying = verifyingOrderId === order.id;
+                    const isCopied = copiedId === order.id;
                     return (
                       <div
                         key={order.id}
-                        className="bg-black/40 border border-white/5 hover:border-indigo-500/20 p-4 rounded-xl flex flex-col gap-3 transition-colors text-xs"
+                        className="bg-black/40 border border-white/10 hover:border-indigo-500/40 p-4 rounded-xl flex flex-col gap-3 transition-all text-xs relative overflow-hidden"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-[10px] font-bold text-white bg-black border border-white/10 px-2 py-0.5 rounded-sm uppercase">
-                              {order.id}
+                            {/* Prominent Order Number Display Badge */}
+                            <span className="font-mono text-xs font-black text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 rounded-md uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+                              ORDER #: {order.id}
                             </span>
-                            <span className="text-[9px] font-mono text-zinc-600">{order.timestamp}</span>
+
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(order.id);
+                                setCopiedId(order.id);
+                                setTimeout(() => setCopiedId(null), 2000);
+                              }}
+                              className="text-[10px] text-zinc-400 hover:text-white bg-white/5 hover:bg-white/10 px-2 py-1 rounded flex items-center gap-1 border border-white/10 transition-all font-mono cursor-pointer"
+                              title="Copy Order Number"
+                            >
+                              <Copy className="w-3 h-3 text-amber-400" />
+                              <span>{isCopied ? 'Copied!' : 'Copy #'}</span>
+                            </button>
+
+                            <span className="text-[9px] font-mono text-zinc-500">{order.timestamp}</span>
                           </div>
                           
                           <span
-                            className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-sm flex items-center gap-1 uppercase tracking-wider ${
+                            className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-sm flex items-center gap-1 uppercase tracking-wider ${
                               order.status === 'Verified'
                                 ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                                 : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
                             }`}
                           >
-                            {order.status === 'Verified' ? 'Verified' : 'Pending'}
+                            {order.status === 'Verified' ? 'Verified' : 'Pending Verification'}
                           </span>
                         </div>
 
                         <div>
-                          <h5 className="font-bold text-white text-xs truncate uppercase tracking-wider">{order.jerseyName}</h5>
-                          <p className="text-[11px] text-zinc-400 mt-1.5 leading-relaxed">
-                            Buyer: <span className="text-white font-semibold font-sans">{order.customerName}</span> ({order.customerPhone}) <br />
-                            Size: <span className="text-white font-bold bg-[#1a1a1a] px-1 border border-white/5 font-mono">{order.size}</span> x{order.quantity} | BDT {order.amount}
+                          <h5 className="font-bold text-white text-xs uppercase tracking-wider">{order.jerseyName}</h5>
+                          <p className="text-[11px] text-zinc-300 mt-1.5 leading-relaxed">
+                            Buyer Name: <span className="text-white font-bold font-sans">{order.customerName}</span> | Phone: <span className="text-emerald-400 font-mono font-bold">{order.customerPhone}</span> <br />
+                            Size: <span className="text-white font-bold bg-[#1a1a1a] px-1.5 py-0.5 border border-white/10 font-mono rounded">{order.size}</span> x{order.quantity} | Total: <span className="text-emerald-400 font-bold font-mono">BDT {order.amount}</span>
                           </p>
                           
                           {/* Payment codes */}
-                          <div className="mt-2.5 inline-flex flex-wrap items-center gap-2.5 bg-black/60 border border-white/10 p-2 rounded text-[10px] font-mono">
+                          <div className="mt-2.5 inline-flex flex-wrap items-center gap-2.5 bg-black/80 border border-white/15 p-2 rounded-lg text-[10px] font-mono">
                             <span className="text-zinc-500 text-[8px] uppercase">WALLET:</span>
-                            <span className="text-zinc-200 font-semibold">{order.paymentMethod}</span>
+                            <span className="text-zinc-200 font-bold">{order.paymentMethod}</span>
                             <span className="text-zinc-700 font-bold">|</span>
                             <span className="text-zinc-500 text-[8px] uppercase">TRX ID:</span>
-                            <span className="text-amber-500 font-extrabold">{order.transactionId}</span>
+                            <span className="text-amber-400 font-black tracking-wider">{order.transactionId}</span>
                           </div>
                         </div>
 
                         {/* Controls */}
-                        <div className="flex items-center justify-end gap-1.5 border-t border-white/5 pt-2">
-                          {order.status !== 'Verified' && (
-                            <button
-                              onClick={() => simulateAdminAutoVerification(order.id)}
-                              disabled={isVerifying}
-                              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-[9px] font-extrabold uppercase tracking-widest rounded-sm flex items-center gap-1 transition-all"
+                        <div className="flex items-center justify-between border-t border-white/5 pt-2">
+                          <span className="text-[9px] text-zinc-500 font-mono">
+                            Match in FB Msg using Order #: <strong className="text-amber-300">{order.id}</strong>
+                          </span>
+
+                          <div className="flex items-center gap-1.5">
+                            {order.status !== 'Verified' && (
+                              <button
+                                onClick={() => simulateAdminAutoVerification(order.id)}
+                                disabled={isVerifying}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-zinc-800 disabled:text-zinc-600 text-white text-[9px] font-extrabold uppercase tracking-widest rounded-sm flex items-center gap-1 transition-all"
+                              >
+                                {isVerifying ? (
+                                  <Clock className="w-3 animate-spin" />
+                                ) : (
+                                  <ShieldCheck className="w-3" />
+                                )}
+                                <span>Validate</span>
+                              </button>
+                            )}
+
+                            <a
+                              href="https://www.facebook.com/share/1Bh4gYajWE/"
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-2 py-1.5 border border-indigo-500/30 text-indigo-300 hover:text-white bg-indigo-500/10 hover:bg-indigo-600/30 rounded text-[10px] font-bold flex items-center gap-1 transition-all"
+                              title="Chat on Facebook"
                             >
-                              {isVerifying ? (
-                                <Clock className="w-3 animate-spin" />
-                              ) : (
-                                <ShieldCheck className="w-3" />
-                              )}
-                              <span>Validate</span>
+                              <Send className="w-3 h-3" />
+                              <span>FB Chat</span>
+                            </a>
+
+                            <button
+                              onClick={() => handleAdminDelete(order.id)}
+                              className="p-1.5 border border-white/5 text-zinc-500 hover:text-red-500 hover:border-red-500/10 rounded-sm hover:bg-red-500/5 transition-all"
+                              title="Delete transaction entry"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
                             </button>
-                          )}
-
-                          <a
-                            href="https://www.facebook.com/share/1Bh4gYajWE/"
-                            target="_blank"
-                            rel="noreferrer"
-                            className="p-1.5 border border-white/5 text-zinc-400 hover:text-white rounded-sm hover:bg-zinc-800 transition-all"
-                            title="Chat with direct link"
-                          >
-                            <Send className="w-3.5 h-3.5" />
-                          </a>
-
-                          <button
-                            onClick={() => handleAdminDelete(order.id)}
-                            className="p-1.5 border border-white/5 text-zinc-500 hover:text-red-500 hover:border-red-500/10 rounded-sm hover:bg-red-500/5 transition-all"
-                            title="Delete transaction entry"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          </div>
                         </div>
                       </div>
                     );
